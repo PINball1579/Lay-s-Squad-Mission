@@ -30,7 +30,7 @@ test-backend: ## Run Go tests with race detection
 	cd backend && go test -race ./...
 
 test-integration: ## Run PostgreSQL persistence and concurrency integration tests
-	docker compose up -d db migrate
+	docker compose -f docker-compose.yml -f docker-compose.test.yml up -d db migrate
 	cd backend && TEST_DATABASE_URL='postgres://crunch:crunch-local-only@127.0.0.1:5432/crunch_squad?sslmode=disable' go test -race ./internal/httpapi ./internal/storage/postgres -count=1
 
 test-frontend: ## Run React component tests

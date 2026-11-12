@@ -3,7 +3,7 @@
 @tailwind utilities;
 
 :root {
-  font-family: Inter, ui-rounded, "Arial Rounded MT Bold", system-ui, sans-serif;
+  font-family: "Noto Sans Thai", Tahoma, Inter, ui-rounded, system-ui, sans-serif;
   color: #241d16;
   background: #ffd928;
   font-synthesis: none;
@@ -13,12 +13,14 @@
 * { box-sizing: border-box; }
 body { margin: 0; min-width: 320px; min-height: 100vh; background: radial-gradient(circle at 80% 10%, #fff6a8 0 8%, transparent 9%), linear-gradient(145deg, #ffd928, #ffbd31); }
 button, input, select { font: inherit; }
-button { touch-action: manipulation; }
+button { touch-action: manipulation; cursor: pointer; }
+button:disabled { cursor: not-allowed; }
+img { max-width: 100%; }
 button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible { outline: 4px solid #241d16; outline-offset: 3px; }
 
 @media (prefers-reduced-motion: no-preference) {
   @keyframes float { 50% { transform: translateY(-10px) rotate(8deg); } }
-  [aria-label="Placeholder chip artwork"] { animation: float 3s ease-in-out infinite; }
+  main > div > img[alt="Lay's"] { animation: float 3s ease-in-out infinite; }
 }
 
 @media (prefers-reduced-motion: reduce) {

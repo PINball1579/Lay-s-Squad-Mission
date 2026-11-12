@@ -2,16 +2,14 @@
 
 [![CI](https://github.com/PINball1579/Lay-s-Squad-Mission/actions/workflows/ci.yml/badge.svg)](https://github.com/PINball1579/Lay-s-Squad-Mission/actions/workflows/ci.yml)
 
-An unofficial, mobile-first cooperative LIFF campaign MVP. Four mock LINE users form a squad, claim unique roles, complete four different missions, and unlock one mock reward. The repository contains no official Lay's logos, packaging, fonts, product claims, coupons, or production credentials.
-
-> All artwork and rewards are clearly labeled placeholders. This project is not affiliated with or endorsed by Lay's or LINE.
+A mobile-first Thai cooperative LIFF campaign experience. Four LINE users form a squad, lock unique roles, complete four different missions, and unlock a team reward. The player journey, invitation card, missions, and admin experience are production-facing; local mode retains fixture identities, QR codes, and reward inventory for repeatable testing.
 
 ## Repository layout
 
 ```text
 frontend/        React, TypeScript, Vite, Tailwind, Vitest, Playwright
 backend/         Go REST API, domain services, LINE and QR adapters
-migrations/      versioned PostgreSQL schema and demo seed
+migrations/      versioned PostgreSQL schema and local QA seed
 docs/            plan, OpenAPI, events, integration, privacy, brand guidance
 infrastructure/  deployment notes and production checklist
 ```
@@ -27,6 +25,14 @@ curl -fsS http://localhost:8080/healthz
 ```
 
 Open `http://localhost:5173`. Choose Mali, Nok, Beam, or Ploy. The local admin dashboard is at `http://localhost:5173/admin`; its default local-only token is documented in `.env.example`.
+
+The default local stack keeps PostgreSQL inside the Compose network, avoiding conflicts with an existing database on ports 5432/5433. Only the web app (`5173`) and API (`8080`) are published to the host.
+
+Managed cloud builds that require an injected proxy CA use the opt-in overlay:
+
+```sh
+docker compose -f docker-compose.yml -f docker-compose.cloud.yml up --build -d
+```
 
 Stop services without deleting the database:
 
@@ -50,14 +56,14 @@ make verify           # tests, lint, and builds
 
 Go 1.27 and Node 24 are the pinned container toolchains. Local Go caches can be redirected with `GOCACHE` and `GOMODCACHE` if the home directory is read-only.
 
-## Demo journey
+## Local QA journey
 
 1. Sign in as a mock user and accept required consent. Optional analytics may remain off.
-2. Create a squad and share/copy the expiring invitation.
-3. Open separate private browser contexts for the other three mock users and join.
-4. Claim each unique role and complete its mission.
+2. Create a squad and generate the branded invitation card.
+3. Open the invitation link in separate private browser contexts. Each invited player chooses an identity, accepts consent, and is joined automatically without re-entering a code.
+4. Lock each unique role and complete its mission.
 5. Use `mock:demo-store` for QR Runner.
-6. The fourth idempotent completion unlocks one `Mock Crunch Badge`.
+6. The fourth idempotent completion unlocks the local fixture reward.
 7. Review consent-filtered metrics in `/admin`.
 
 ## Real LINE mode
@@ -89,5 +95,5 @@ See [privacy and security considerations](docs/privacy-security.md) and the [Ope
 
 ## Current MVP boundary
 
-The browser experience, API, domain rules, PostgreSQL repository, migrations, demo seed, analytics dashboard, mocks, automated tests, dependency updates, and CI release gates are implemented. Compose runs PostgreSQL as the system of record; the in-memory implementation remains available only when mock mode is explicitly enabled and `DATABASE_URL` is absent. No production deployment is included because hosting, official LINE credentials, authorized assets, legal approval, and managed infrastructure are external campaign-owner decisions.
+The browser experience, API, domain rules, PostgreSQL repository, migrations, local seed, analytics dashboard, mocks, automated tests, dependency updates, and CI release gates are implemented. Compose runs PostgreSQL as the system of record; the in-memory implementation remains available only when mock mode is explicitly enabled and `DATABASE_URL` is absent. Public launch still requires hosting, official LINE credentials, final authorized campaign artwork, approved Thai legal copy, real reward fulfillment rules, and managed infrastructure supplied by the campaign owner.
 

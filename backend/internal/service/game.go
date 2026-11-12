@@ -635,7 +635,7 @@ func NewMissionChallenge(role domain.Role) map[string]any {
 		}
 		if choice.Int64() == 1 {
 			challenge["variant"] = "location"
-			challenge["questions"] = []map[string]any{{"id": "q1", "prompt": "Which role verifies the campaign location?", "options": []string{"QR Runner", "Flavor Scout", "Crunch Creator"}}, {"id": "q2", "prompt": "What reward exists in this unofficial demo?", "options": []string{"Mock Crunch Badge", "Cash coupon", "Real product"}}}
+			challenge["questions"] = []map[string]any{{"id": "q1", "prompt": "บทบาทใดมีหน้าที่ยืนยันจุดกิจกรรม?", "options": []string{"QR Runner", "Flavor Scout", "Crunch Creator"}}, {"id": "q2", "prompt": "เมื่อทีมทำครบทุกภารกิจจะเกิดอะไรขึ้น?", "options": []string{"Mock Crunch Badge", "Cash coupon", "Real product"}}}
 		} else {
 			challenge["variant"] = "squad"
 			challenge["questions"] = []map[string]any{{"id": "q1", "prompt": "How many unique roles complete a squad?", "options": []string{"Two", "Three", "Four"}}, {"id": "q2", "prompt": "What unlocks the Crunch Vault?", "options": []string{"All four missions", "One share", "A purchase"}}}

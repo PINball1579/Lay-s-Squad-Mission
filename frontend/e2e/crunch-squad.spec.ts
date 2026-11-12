@@ -3,15 +3,11 @@ import { chromium, expect, request, test, type Page } from '@playwright/test'
 async function login(page: Page, mockUser: 'mali' | 'nok' | 'beam' | 'ploy', invite = '', analytics = true) {
   await page.goto(invite ? `/?invite=${encodeURIComponent(invite)}` : '/')
   await page.getByRole('button', { name: mockUser }).click()
-  await page.getByLabel('I accept required data use').check()
-  if (analytics) await page.getByLabel('Optional campaign analytics').check()
-  await page.getByRole('button', { name: /Continue to the squad/i }).click()
-  await expect(page.getByRole('heading', { name: /Form your squad/i })).toBeVisible()
-}
-
-async function join(page: Page) {
-  await page.getByRole('button', { name: /Join squad/i }).click()
-  await expect(page.getByRole('region', { name: 'Squad roles' })).toBeVisible()
+  await page.getByLabel('ยอมรับการใช้ข้อมูลที่จำเป็น').check()
+  if (analytics) await page.getByLabel('อนุญาตการวิเคราะห์กิจกรรม').check()
+  await page.getByRole('button', { name: invite ? /ยืนยันและเข้าร่วมทีม/i : /ยืนยันและเริ่มเล่น/i }).click()
+  if (invite) await expect(page.getByRole('region', { name: 'ภารกิจของทีม' })).toBeVisible()
+  else await expect(page.getByRole('heading', { name: /ตั้งทีมของคุณ/i })).toBeVisible()
 }
 
 function roleCard(page: Page, name: string) {
@@ -19,8 +15,8 @@ function roleCard(page: Page, name: string) {
 }
 
 async function claim(page: Page, name: string) {
-  await roleCard(page, name).getByRole('button', { name: /Choose this role/i }).click()
-  await expect(roleCard(page, name).getByRole('button', { name: /Start my mission/i })).toBeVisible()
+  await roleCard(page, name).getByRole('button', { name: /ล็อกภารกิจนี้/i }).click()
+  await expect(roleCard(page, name).getByRole('button', { name: /เริ่มภารกิจของฉัน/i })).toBeVisible()
 }
 
 test('four-player journey, race handling, consent, QR, reward, and dashboard', async ({ baseURL }) => {
@@ -39,23 +35,20 @@ test('four-player journey, race handling, consent, QR, reward, and dashboard', a
 
   await login(mali, 'mali')
   const created = mali.waitForResponse((response) => response.url().endsWith('/api/v1/squads') && response.request().method() === 'POST')
-  await mali.getByRole('button', { name: /Create squad/i }).click()
+  await mali.getByRole('button', { name: /สร้างทีม/i }).click()
   const createBody = await (await created).json()
   const invite = createBody.invitation.token as string
-  await expect(mali.getByRole('region', { name: 'Squad roles' })).toBeVisible()
+  await expect(mali.getByRole('region', { name: 'ภารกิจของทีม' })).toBeVisible()
 
   await login(nok, 'nok', invite, false)
-  await join(nok)
   await login(beam, 'beam', invite)
-  await join(beam)
   await login(ploy, 'ploy', invite)
-  await join(ploy)
 
   const maliResponse = mali.waitForResponse((response) => response.url().includes('/roles/flavor_scout'))
   const nokResponse = nok.waitForResponse((response) => response.url().includes('/roles/flavor_scout'))
   await Promise.all([
-    roleCard(mali, 'Flavor Scout').getByRole('button', { name: /Choose this role/i }).click(),
-    roleCard(nok, 'Flavor Scout').getByRole('button', { name: /Choose this role/i }).click(),
+    roleCard(mali, 'นักล่ารสชาติ').getByRole('button', { name: /ล็อกภารกิจนี้/i }).click(),
+    roleCard(nok, 'นักล่ารสชาติ').getByRole('button', { name: /ล็อกภารกิจนี้/i }).click(),
   ])
   const maliStatus = (await maliResponse).status()
   const nokStatus = (await nokResponse).status()
@@ -64,38 +57,41 @@ test('four-player journey, race handling, consent, QR, reward, and dashboard', a
   const flavorPage = maliStatus === 200 ? mali : nok
   const creatorPage = flavorPage === mali ? nok : mali
   await creatorPage.reload()
-  await expect(creatorPage.getByRole('region', { name: 'Squad roles' })).toBeVisible()
-  await claim(creatorPage, 'Crunch Creator')
-  await claim(beam, 'Snack Detective')
-  await claim(ploy, 'QR Runner')
+  await expect(creatorPage.getByRole('region', { name: 'ภารกิจของทีม' })).toBeVisible()
+  await claim(creatorPage, 'ครีเอเตอร์สายครันช์')
+  await claim(beam, 'นักสืบสายสแน็ก')
+  await claim(ploy, 'นักวิ่ง QR')
 
-  await roleCard(flavorPage, 'Flavor Scout').getByRole('button', { name: /Start my mission/i }).click()
-  const requiredFlavors = await flavorPage.getByRole('list', { name: 'Required flavor order' }).getByRole('listitem').allTextContents()
+  await roleCard(flavorPage, 'นักล่ารสชาติ').getByRole('button', { name: /เริ่มภารกิจของฉัน/i }).click()
+  const requiredItems = flavorPage.getByRole('list', { name: 'ลำดับรสชาติที่ต้องหา' }).getByRole('listitem')
+  await expect(requiredItems).toHaveCount(3)
+  const requiredFlavors = await requiredItems.allTextContents()
   for (const flavor of requiredFlavors) await flavorPage.getByRole('button', { name: new RegExp(flavor, 'i') }).click()
-  await flavorPage.getByRole('button', { name: /Complete mission/i }).click()
+  await flavorPage.getByRole('button', { name: /สำเร็จภารกิจ/i }).click()
 
-  await roleCard(creatorPage, 'Crunch Creator').getByRole('button', { name: /Start my mission/i }).click()
-  await creatorPage.getByRole('button', { name: /Save snack moment/i }).click()
+  await roleCard(creatorPage, 'ครีเอเตอร์สายครันช์').getByRole('button', { name: /เริ่มภารกิจของฉัน/i }).click()
+  await creatorPage.getByRole('button', { name: /บันทึกโมเมนต์/i }).click()
 
-  await roleCard(beam, 'Snack Detective').getByRole('button', { name: /Start my mission/i }).click()
-  if (await beam.getByLabel('Four', { exact: true }).count()) {
-    await beam.getByLabel('Four', { exact: true }).check()
-    await beam.getByLabel('All four missions', { exact: true }).check()
+  await roleCard(beam, 'นักสืบสายสแน็ก').getByRole('button', { name: /เริ่มภารกิจของฉัน/i }).click()
+  await expect(beam.getByRole('heading', { name: 'แกะเบาะเงื่อนงำให้ได้' })).toBeVisible()
+  if (await beam.getByLabel('4 บทบาท', { exact: true }).count()) {
+    await beam.getByLabel('4 บทบาท', { exact: true }).check()
+    await beam.getByLabel('ทำครบทั้ง 4 ภารกิจ', { exact: true }).check()
   } else {
-    await beam.getByLabel('QR Runner', { exact: true }).check()
-    await beam.getByLabel('Mock Crunch Badge', { exact: true }).check()
+    await beam.getByLabel('นักวิ่ง QR', { exact: true }).check()
+    await beam.getByLabel('ปลดล็อกสิทธิ์รางวัล', { exact: true }).check()
   }
-  await beam.getByRole('button', { name: /Solve the case/i }).click()
+  await beam.getByRole('button', { name: /ส่งคำตอบ/i }).click()
 
-  await roleCard(ploy, 'QR Runner').getByRole('button', { name: /Start my mission/i }).click()
-  await ploy.getByLabel('Fallback code').fill('not-a-valid-code')
-  await ploy.getByRole('button', { name: /Verify code/i }).click()
-  await expect(ploy.getByRole('status')).toContainText(/invalid or expired/i)
-  await ploy.getByLabel('Fallback code').fill('mock:demo-store')
-  await ploy.getByRole('button', { name: /Verify code/i }).click()
-  await expect(ploy.getByRole('heading', { name: /Crunch Vault unlocked/i })).toBeVisible()
-  await ploy.getByRole('button', { name: /Claim mock reward/i }).click()
-  await expect(ploy.getByRole('button', { name: /Mock reward claimed/i })).toBeDisabled()
+  await roleCard(ploy, 'นักวิ่ง QR').getByRole('button', { name: /เริ่มภารกิจของฉัน/i }).click()
+  await ploy.getByLabel('รหัสสำหรับทดสอบภายใน').fill('not-a-valid-code')
+  await ploy.getByRole('button', { name: /ยืนยันโค้ด/i }).click()
+  await expect(ploy.getByRole('status')).toContainText(/โค้ดไม่ถูกต้อง/i)
+  await ploy.getByLabel('รหัสสำหรับทดสอบภายใน').fill('mock:demo-store')
+  await ploy.getByRole('button', { name: /ยืนยันโค้ด/i }).click()
+  await expect(ploy.getByRole('heading', { name: /Crunch Vault เปิดแล้ว/i })).toBeVisible()
+  await ploy.getByRole('button', { name: /รับสิทธิ์รางวัล/i }).click()
+  await expect(ploy.getByRole('button', { name: /รับสิทธิ์แล้ว/i })).toBeDisabled()
 
   const fifth = await request.newContext({ baseURL: baseURL ?? 'http://localhost:5173' })
   const auth = await fifth.post('/api/v1/auth/mock', { data: { mockUserId: 'test-runner' } })
@@ -107,10 +103,10 @@ test('four-player journey, race handling, consent, QR, reward, and dashboard', a
   await fifth.dispose()
 
   await ploy.goto('/admin')
-  await ploy.getByLabel('Admin API token').fill('local-admin-demo-token')
-  await ploy.getByRole('button', { name: 'Load' }).click()
-  await expect(ploy.getByText('Unlocked', { exact: true }).locator('..')).toContainText('1')
-  await expect(ploy.getByText('Redeemed', { exact: true }).locator('..')).toContainText('1')
+  await ploy.getByLabel('โทเคนผู้ดูแล').fill('local-admin-demo-token')
+  await ploy.getByRole('button', { name: 'โหลดข้อมูล' }).click()
+  await expect(ploy.getByText('ปลดล็อก', { exact: true }).locator('..')).toContainText('1')
+  await expect(ploy.getByText('รับสิทธิ์', { exact: true }).locator('..')).toContainText('1')
 
   await Promise.all(contexts.map((context) => context.close()))
   await browser.close()

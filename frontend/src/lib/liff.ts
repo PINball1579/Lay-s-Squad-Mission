@@ -4,8 +4,14 @@ export interface LineAdapter {
   initialize(): Promise<void>
   getIDToken(): string | null
   login(): void
-  share(text: string): Promise<boolean>
+  share(invite: ShareInvitation): Promise<boolean>
   scanQR(): Promise<string | null>
+}
+
+export type ShareInvitation = {
+  url: string
+  squadName: string
+  expiresLabel: string
 }
 
 export class RealLineAdapter implements LineAdapter {
@@ -18,9 +24,31 @@ export class RealLineAdapter implements LineAdapter {
   getIDToken() { return liff.getIDToken() }
   login() { liff.login({ redirectUri: window.location.href }) }
 
-  async share(text: string) {
+  async share(invite: ShareInvitation) {
     if (!liff.isApiAvailable('shareTargetPicker')) return false
-    await liff.shareTargetPicker([{ type: 'text', text }])
+    const heroUrl = import.meta.env.VITE_SHARE_IMAGE_URL || 'https://thumb.wikimedia.org/wikipedia/commons/thumb/6/67/Lay%27s_logo_2019.svg/960px-Lay%27s_logo_2019.svg.png'
+    const messages = [{
+      type: 'flex',
+      altText: `มาเข้าทีม ${invite.squadName} ใน Lay's Crunch Squad`,
+      contents: {
+        type: 'bubble',
+        hero: { type: 'image', url: heroUrl, size: 'full', aspectRatio: '20:13', aspectMode: 'cover', backgroundColor: '#FFD928' },
+        body: {
+          type: 'box', layout: 'vertical', spacing: 'md', backgroundColor: '#FFF8DA',
+          contents: [
+            { type: 'text', text: "LAY'S CRUNCH SQUAD", weight: 'bold', color: '#D93B2B', size: 'sm' },
+            { type: 'text', text: `ทีม ${invite.squadName} กำลังรอคุณ!`, weight: 'bold', size: 'xl', wrap: true, color: '#241D16' },
+            { type: 'text', text: 'เลือกภารกิจของคุณ รวมพลังความครันช์ แล้วปลดล็อกรางวัลไปด้วยกัน', wrap: true, color: '#594A3D', size: 'sm' },
+            { type: 'text', text: invite.expiresLabel, wrap: true, color: '#8B6B52', size: 'xs' },
+          ],
+        },
+        footer: {
+          type: 'box', layout: 'vertical', backgroundColor: '#FFF8DA',
+          contents: [{ type: 'button', style: 'primary', color: '#D93B2B', action: { type: 'uri', label: 'เข้าร่วมทีม', uri: invite.url } }],
+        },
+      },
+    }] as Parameters<typeof liff.shareTargetPicker>[0]
+    await liff.shareTargetPicker(messages)
     return true
   }
 
@@ -43,9 +71,9 @@ export const lineAdapter: LineAdapter = import.meta.env.VITE_MOCK_LIFF === 'fals
   ? new RealLineAdapter()
   : new MockLineAdapter()
 
-export async function shareOrCopy(adapter: LineAdapter, text: string, url: string) {
-  if (await adapter.share(`${text}\n${url}`)) return 'line'
-  await navigator.clipboard.writeText(url)
+export async function shareOrCopy(adapter: LineAdapter, invite: ShareInvitation) {
+  if (await adapter.share(invite)) return 'line'
+  await navigator.clipboard.writeText(invite.url)
   return 'clipboard'
 }
 

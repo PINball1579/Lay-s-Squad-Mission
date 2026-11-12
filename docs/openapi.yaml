@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: Lay's Crunch Squad API
   version: 0.1.0
-  description: Unofficial campaign MVP. All brand and reward content is placeholder-only.
+  description: Thai mobile-first squad campaign API. Local mode includes deterministic QA identities, QR codes, and reward inventory.
 servers:
   - url: http://localhost:8080/api/v1
 tags:

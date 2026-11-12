@@ -27,9 +27,9 @@ export type Dashboard = {
 }
 
 export const roles: { code: Role; title: string; icon: string; description: string }[] = [
-  { code: 'flavor_scout', title: 'Flavor Scout', icon: '◎', description: 'Race through the snack shelf.' },
-  { code: 'crunch_creator', title: 'Crunch Creator', icon: '✦', description: 'Build the perfect snack moment.' },
-  { code: 'snack_detective', title: 'Snack Detective', icon: '?', description: 'Crack the campaign clues.' },
-  { code: 'qr_runner', title: 'QR Runner', icon: '⌁', description: 'Find and verify the campaign code.' },
+  { code: 'flavor_scout', title: 'นักล่ารสชาติ', icon: '◎', description: 'ตามล่ารสชาติให้ครบตามลำดับ' },
+  { code: 'crunch_creator', title: 'ครีเอเตอร์สายครันช์', icon: '✦', description: 'ออกแบบโมเมนต์กินเลย์ให้เป็นสไตล์คุณ' },
+  { code: 'snack_detective', title: 'นักสืบสายสแน็ก', icon: '?', description: 'แก้ปริศนาและค้นหาคำตอบที่ซ่อนอยู่' },
+  { code: 'qr_runner', title: 'นักวิ่ง QR', icon: '⌁', description: 'ค้นหาและยืนยันโค้ดจากจุดกิจกรรม' },
 ]
 

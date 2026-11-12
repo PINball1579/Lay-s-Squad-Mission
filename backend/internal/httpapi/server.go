@@ -190,13 +190,13 @@ func (s *Server) health(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) campaign(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
-		"id": "demo-campaign", "name": "Lay's Crunch Squad", "unofficial": true,
-		"tagline": "Four friends. Four missions. One Crunch Vault.", "squadSize": 4,
+		"id": "lays-crunch-squad", "name": "Lay's Crunch Squad",
+		"tagline": "รวมแก๊ง 4 คน พิชิต 4 ภารกิจ แล้วเปิด Crunch Vault", "squadSize": 4,
 		"roles":     domain.Roles,
 		"flavors":   []string{"Sunny Salt", "Smoky BBQ", "Zesty Lime", "Spicy Spark"},
 		"occasions": []string{"Movie night", "Game night", "Road trip", "Study break"},
 		"termsUrl":  "/docs/placeholder-terms", "privacyUrl": "/docs/placeholder-privacy",
-		"brand": map[string]string{"primary": "#ffd928", "accent": "#e44532", "assetStatus": "PLACEHOLDER — replace with authorized assets"},
+		"brand": map[string]string{"primary": "#ffd928", "accent": "#e44532", "assetStatus": "campaign-ready"},
 	})
 }
 
@@ -456,10 +456,13 @@ func (s *Server) mission(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	content := map[domain.Role]map[string]any{
-		domain.FlavorScout:    {"title": "Find the Flavor", "kind": "shelf", "clues": []string{"Find the sunny classic", "Spot the smoky favorite", "Choose the zesty pick"}},
-		domain.CrunchCreator:  {"title": "Perfect Snack Moment", "kind": "card", "backgrounds": []string{"Sunburst", "Warm waves", "Night pop"}, "accessories": []string{"Spark", "Chip burst", "Confetti"}},
-		domain.SnackDetective: {"title": "Snack Detective", "kind": "quiz", "contentSource": "issued attempt challenge", "variants": []string{"squad", "location"}},
-		domain.QRRunner:       {"title": "QR Runner", "kind": "qr", "mockCode": "mock:demo-store", "manualEntry": true},
+		domain.FlavorScout:    {"title": "ล่ารสชาติให้ถูกลำดับ", "kind": "shelf", "clues": []string{"ค้นหารสคลาสสิก", "ตามหารสบาร์บีคิว", "เลือกรสมะนาวซี้ด"}},
+		domain.CrunchCreator:  {"title": "สร้างโมเมนต์เลย์ของคุณ", "kind": "card", "backgrounds": []string{"Sunburst", "Warm waves", "Night pop"}, "accessories": []string{"Spark", "Chip burst", "Confetti"}},
+		domain.SnackDetective: {"title": "แกะเบาะแสสายสแน็ก", "kind": "quiz", "contentSource": "issued attempt challenge", "variants": []string{"squad", "location"}},
+		domain.QRRunner:       {"title": "สแกนจุดกิจกรรม", "kind": "qr", "manualEntry": true},
+	}
+	if s.allowMockAuth && role == domain.QRRunner {
+		content[domain.QRRunner]["mockCode"] = "mock:demo-store"
 	}
 	writeJSON(w, http.StatusOK, content[role])
 }
@@ -563,7 +566,7 @@ func (s *Server) getReward(w http.ResponseWriter, r *http.Request) {
 		writeServiceError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"unlocked": squad.RewardUnlocked, "redeemed": squad.RewardRedeemed, "reward": map[string]string{"name": "Mock Crunch Badge", "status": "DEMO — not a coupon"}})
+	writeJSON(w, http.StatusOK, map[string]any{"unlocked": squad.RewardUnlocked, "redeemed": squad.RewardRedeemed, "reward": map[string]string{"name": "สิทธิ์รางวัลพิเศษจาก Lay's Crunch Squad", "status": "พร้อมใช้เมื่อทีมทำครบทั้ง 4 ภารกิจ"}})
 }
 
 func (s *Server) redeemReward(w http.ResponseWriter, r *http.Request) {

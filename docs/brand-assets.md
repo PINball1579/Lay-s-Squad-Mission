@@ -1,15 +1,10 @@
-# Brand asset replacement guide
+# Brand asset guide
 
-The MVP intentionally uses geometric CSS shapes, emoji-like symbols, system fonts, invented flavor labels, and the visible label `PLACEHOLDER ART`. It does not reproduce official packaging or a logo.
+## Current campaign UI assets
 
-Authorized campaign teams can replace the placeholder layer without changing game logic:
+- `frontend/public/brand/lays-logo.svg` is the Lay's 2019 trademark artwork sourced from [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Lay%27s_logo_2019.svg). Trademark use must be approved by the brand owner before public launch.
+- `frontend/public/brand/lays-classic.jpg` is a Lay's Classic product photograph by Famartin, sourced from [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:2019-04-01_23_16_02_Lay%27s_Classic_Potato_Chips_in_the_Dulles_section_of_Sterling,_Loudoun_County,_Virginia.jpg) under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/). The in-product credit must remain visible and derivative distributions must follow the license.
 
-1. Add approved files under `frontend/public/brand/` with descriptive, versioned names.
-2. Update campaign brand tokens in `tailwind.config.js` or move them into the published campaign configuration.
-3. Replace `ChipMark` and mission preview placeholders with accessible `<img>` elements including approved alt text.
-4. Replace invented flavor/occasion/claim copy in campaign configuration and seed data only after brand/legal approval.
-5. Record asset source, license/authorization owner, approval date, expiry, locale, and checksum in an asset manifest.
-6. Keep a neutral fallback so missing/expired assets never show a broken experience.
+For launch, replace these files with the exact campaign artwork supplied through Lay's/PepsiCo brand governance. Do not hotlink campaign artwork; keep reviewed, optimized assets in the application build.
 
-Do not commit source design files containing restricted assets unless the repository and access policy are approved for them. Do not use scraped images or infer a visual identity from public packaging.
-
+Record the source, authorization owner, approval date, expiry, locale, and checksum for every launch asset. Keep accessible alt text and a neutral fallback so a missing asset never breaks the player journey.
