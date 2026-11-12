@@ -1,5 +1,7 @@
 # Lay's Crunch Squad
 
+[![CI](https://github.com/PINball1579/Lay-s-Squad-Mission/actions/workflows/ci.yml/badge.svg)](https://github.com/PINball1579/Lay-s-Squad-Mission/actions/workflows/ci.yml)
+
 An unofficial, mobile-first cooperative LIFF campaign MVP. Four mock LINE users form a squad, claim unique roles, complete four different missions, and unlock one mock reward. The repository contains no official Lay's logos, packaging, fonts, product claims, coupons, or production credentials.
 
 > All artwork and rewards are clearly labeled placeholders. This project is not affiliated with or endorsed by Lay's or LINE.
@@ -87,5 +89,5 @@ See [privacy and security considerations](docs/privacy-security.md) and the [Ope
 
 ## Current MVP boundary
 
-The browser experience, API, domain rules, PostgreSQL repository, migrations, demo seed, analytics dashboard, mocks, and automated tests are implemented. Compose runs PostgreSQL as the system of record; the in-memory implementation remains available only when mock mode is explicitly enabled and `DATABASE_URL` is absent. No production deployment is included.
+The browser experience, API, domain rules, PostgreSQL repository, migrations, demo seed, analytics dashboard, mocks, automated tests, dependency updates, and CI release gates are implemented. Compose runs PostgreSQL as the system of record; the in-memory implementation remains available only when mock mode is explicitly enabled and `DATABASE_URL` is absent. No production deployment is included because hosting, official LINE credentials, authorized assets, legal approval, and managed infrastructure are external campaign-owner decisions.
 
