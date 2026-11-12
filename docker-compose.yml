@@ -1,0 +1,88 @@
+name: crunch-squad
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-crunch_squad}
+      POSTGRES_USER: ${POSTGRES_USER:-crunch}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-crunch-local-only}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  migrate:
+    image: postgres:16-alpine
+    depends_on:
+      db: { condition: service_healthy }
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD:-crunch-local-only}
+    volumes:
+      - ./migrations:/migrations:ro
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        psql -h db -U "${POSTGRES_USER:-crunch}" -d "${POSTGRES_DB:-crunch_squad}" -v ON_ERROR_STOP=1 -c 'CREATE TABLE IF NOT EXISTS schema_migrations (version text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())'
+        for file in /migrations/*.up.sql; do
+          version=$$(basename "$$file")
+          applied=$$(psql -h db -U "${POSTGRES_USER:-crunch}" -d "${POSTGRES_DB:-crunch_squad}" -tAc "SELECT 1 FROM schema_migrations WHERE version = '$$version'")
+          if [ "$$applied" != "1" ]; then
+            psql -h db -U "${POSTGRES_USER:-crunch}" -d "${POSTGRES_DB:-crunch_squad}" -v ON_ERROR_STOP=1 --single-transaction -f "$$file" -c "INSERT INTO schema_migrations(version) VALUES ('$$version')"
+          fi
+        done
+
+  api:
+    build:
+      context: ./backend
+      secrets:
+        - proxy_ca
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    environment:
+      PORT: "8080"
+      MOCK_LIFF: ${MOCK_LIFF:-true}
+      CAMPAIGN_ID: ${CAMPAIGN_ID:-demo-campaign}
+      ALLOWED_ORIGIN: ${ALLOWED_ORIGIN:-http://localhost:5173}
+      SECURE_COOKIES: ${SECURE_COOKIES:-false}
+      DATABASE_URL: postgres://${POSTGRES_USER:-crunch}:${POSTGRES_PASSWORD:-crunch-local-only}@db:5432/${POSTGRES_DB:-crunch_squad}?sslmode=disable
+      QR_SIGNING_SECRET: ${QR_SIGNING_SECRET:-local-qr-signing-key-change-me-32-byte}
+      PSEUDONYM_KEY: ${PSEUDONYM_KEY:-local-pseudonym-key-change-me-32-bytes}
+      ADMIN_API_TOKEN: ${ADMIN_API_TOKEN:-local-admin-demo-token}
+      LINE_CHANNEL_ID: ${LINE_CHANNEL_ID:-}
+    ports:
+      - "127.0.0.1:8080:8080"
+    healthcheck:
+      test: ["CMD", "/crunch-api", "healthcheck"]
+      interval: 5s
+      timeout: 4s
+      retries: 10
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ./frontend
+      args:
+        VITE_MOCK_LIFF: ${MOCK_LIFF:-true}
+        VITE_LIFF_ID: ${VITE_LIFF_ID:-}
+      secrets:
+        - proxy_ca
+    depends_on:
+      api: { condition: service_healthy }
+    ports:
+      - "127.0.0.1:5173:8080"
+    restart: unless-stopped
+
+secrets:
+  proxy_ca:
+    file: ${CODEX_PROXY_CERT:-/etc/ssl/certs/ca-certificates.crt}
+
+volumes:
+  postgres-data:
+

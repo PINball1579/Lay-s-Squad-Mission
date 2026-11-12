@@ -1,0 +1,211 @@
+openapi: 3.1.0
+info:
+  title: Lay's Crunch Squad API
+  version: 0.1.0
+  description: Unofficial campaign MVP. All brand and reward content is placeholder-only.
+servers:
+  - url: http://localhost:8080/api/v1
+tags:
+  - {name: Auth}
+  - {name: Campaign}
+  - {name: Squads}
+  - {name: Missions}
+  - {name: Rewards}
+  - {name: Analytics}
+  - {name: Admin}
+paths:
+  /campaign:
+    get:
+      tags: [Campaign]
+      summary: Get published campaign configuration
+      responses: {'200': {description: Campaign configuration, content: {application/json: {schema: {type: object}}}}}
+  /auth/mock:
+    post:
+      tags: [Auth]
+      summary: Authenticate one configured local mock user
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/MockAuthRequest'}}}}
+      responses: {'200': {$ref: '#/components/responses/SessionResponse'}, '404': {$ref: '#/components/responses/Error'}}
+  /auth/line:
+    post:
+      tags: [Auth]
+      summary: Exchange a LIFF ID token for an application session
+      description: The backend verifies the ID token with LINE and never trusts a frontend-supplied LINE user ID.
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [idToken], properties: {idToken: {type: string}}}}}}
+      responses: {'200': {$ref: '#/components/responses/SessionResponse'}, '401': {$ref: '#/components/responses/Error'}}
+  /auth/logout:
+    post: {$ref: '#/components/pathItems/CsrfMutation'}
+  /me:
+    get:
+      tags: [Auth]
+      responses: {'200': {description: Current player and consent}, '401': {$ref: '#/components/responses/Error'}}
+  /consent:
+    post:
+      tags: [Campaign]
+      parameters: [{$ref: '#/components/parameters/Csrf'}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/Consent'}}}}
+      responses: {'200': {description: Recorded consent}, '403': {$ref: '#/components/responses/Error'}}
+  /squads:
+    post:
+      tags: [Squads]
+      parameters: [{$ref: '#/components/parameters/Csrf'}]
+      requestBody: {required: true, content: {application/json: {schema: {type: object, properties: {name: {type: string, maxLength: 80}}}}}}
+      responses: {'201': {description: Squad and invitation}, '409': {$ref: '#/components/responses/Error'}}
+  /squads/join:
+    post:
+      tags: [Squads]
+      parameters: [{$ref: '#/components/parameters/Csrf'}]
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [token], properties: {token: {type: string}}}}}}
+      responses: {'200': {description: Joined squad}, '409': {$ref: '#/components/responses/Error'}, '410': {$ref: '#/components/responses/Error'}}
+  /squads/{squadId}:
+    parameters: [{$ref: '#/components/parameters/SquadId'}]
+    get:
+      tags: [Squads]
+      responses: {'200': {description: Squad snapshot, content: {application/json: {schema: {$ref: '#/components/schemas/Squad'}}}}}
+  /squads/{squadId}/leave:
+    parameters: [{$ref: '#/components/parameters/SquadId'}]
+    post: {$ref: '#/components/pathItems/CsrfMutation'}
+  /squads/{squadId}/invitations:
+    parameters: [{$ref: '#/components/parameters/SquadId'}]
+    post:
+      tags: [Squads]
+      parameters: [{$ref: '#/components/parameters/Csrf'}]
+      responses: {'201': {description: Expiring unguessable invitation}}
+  /squads/{squadId}/roles/{role}:
+    parameters: [{$ref: '#/components/parameters/SquadId'}, {$ref: '#/components/parameters/Role'}]
+    post:
+      tags: [Squads]
+      parameters: [{$ref: '#/components/parameters/Csrf'}]
+      responses: {'200': {description: Updated squad}, '409': {$ref: '#/components/responses/Error'}}
+  /missions/{role}:
+    parameters: [{$ref: '#/components/parameters/Role'}]
+    get:
+      tags: [Missions]
+      responses: {'200': {description: Configurable mission content}}
+  /squads/{squadId}/missions/{role}/start:
+    parameters: [{$ref: '#/components/parameters/SquadId'}, {$ref: '#/components/parameters/Role'}, {$ref: '#/components/parameters/Csrf'}]
+    post:
+      tags: [Missions]
+      summary: Issue a short-lived attempt bound to the authenticated role assignment
+      responses: {'201': {description: Mission attempt, content: {application/json: {schema: {$ref: '#/components/schemas/MissionAttempt'}}}}, '400': {$ref: '#/components/responses/Error'}, '401': {$ref: '#/components/responses/Error'}, '403': {$ref: '#/components/responses/Error'}, '409': {$ref: '#/components/responses/Error'}}
+  /squads/{squadId}/missions/{role}/complete:
+    parameters: [{$ref: '#/components/parameters/SquadId'}, {$ref: '#/components/parameters/Role'}, {$ref: '#/components/parameters/Csrf'}, {$ref: '#/components/parameters/IdempotencyKey'}]
+    post:
+      tags: [Missions]
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [attemptId, properties], properties: {attemptId: {type: string, format: uuid}, properties: {type: object, additionalProperties: true}}}}}}
+      responses: {'200': {description: Idempotent attempt consumption and squad snapshot}, '400': {$ref: '#/components/responses/Error'}, '401': {$ref: '#/components/responses/Error'}, '403': {$ref: '#/components/responses/Error'}, '409': {$ref: '#/components/responses/Error'}, '422': {$ref: '#/components/responses/Error'}}
+  /qr/validate:
+    post:
+      tags: [Missions]
+      parameters: [{$ref: '#/components/parameters/Csrf'}]
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [token, attemptId], properties: {token: {type: string}, attemptId: {type: string, format: uuid}}}}}}
+      responses: {'200': {description: Verified location claims}, '422': {$ref: '#/components/responses/Error'}}
+  /squads/{squadId}/reward:
+    parameters: [{$ref: '#/components/parameters/SquadId'}]
+    get:
+      tags: [Rewards]
+      responses: {'200': {description: Reward state}}
+  /squads/{squadId}/reward/redeem:
+    parameters: [{$ref: '#/components/parameters/SquadId'}]
+    post:
+      tags: [Rewards]
+      parameters: [{$ref: '#/components/parameters/Csrf'}, {$ref: '#/components/parameters/IdempotencyKey'}]
+      responses: {'200': {description: Stable redemption result}, '409': {$ref: '#/components/responses/Error'}}
+  /events:
+    post:
+      tags: [Analytics]
+      parameters: [{$ref: '#/components/parameters/Csrf'}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/Event'}}}}
+      responses: {'202': {description: Stored or consent-filtered}}
+  /admin/metrics:
+    get:
+      tags: [Admin]
+      parameters: [{$ref: '#/components/parameters/AdminToken'}]
+      responses: {'200': {description: Aggregated campaign metrics}}
+  /admin/events.csv:
+    get:
+      tags: [Admin]
+      parameters: [{$ref: '#/components/parameters/AdminToken'}]
+      responses: {'200': {description: Consent-filtered CSV export, content: {text/csv: {schema: {type: string}}}}}
+components:
+  parameters:
+    Csrf: {name: X-CSRF-Token, in: header, required: true, schema: {type: string}}
+    IdempotencyKey: {name: Idempotency-Key, in: header, required: true, schema: {type: string}}
+    AdminToken: {name: X-Admin-Token, in: header, required: true, schema: {type: string}}
+    SquadId: {name: squadId, in: path, required: true, schema: {type: string, format: uuid}}
+    Role: {name: role, in: path, required: true, schema: {type: string, enum: [flavor_scout, crunch_creator, snack_detective, qr_runner]}}
+  schemas:
+    MockAuthRequest: {type: object, required: [mockUserId], properties: {mockUserId: {type: string, description: Four UI users are mali, nok, beam, and ploy. test-runner is reserved for full-squad E2E validation., enum: [mali, nok, beam, ploy, test-runner]}}}
+    Consent: {type: object, required: [requiredAccepted, analyticsAllowed], properties: {requiredAccepted: {type: boolean}, analyticsAllowed: {type: boolean}}}
+    Session: {type: object, properties: {user: {type: object}, csrfToken: {type: string}, expiresAt: {type: string, format: date-time}}}
+    Squad: {type: object, required: [id, status, members, rewardUnlocked], properties: {id: {type: string, format: uuid}, status: {type: string}, members: {type: array, items: {type: object}}, rewardUnlocked: {type: boolean}, rewardUnlockId: {type: string, format: uuid}}}
+    MissionAttempt:
+      type: object
+      required: [id, squadId, role, challenge, status, startedAt, expiresAt]
+      properties:
+        id: {type: string, format: uuid}
+        squadId: {type: string, format: uuid}
+        role: {type: string, enum: [flavor_scout, crunch_creator, snack_detective, qr_runner]}
+        challenge: {$ref: '#/components/schemas/MissionChallenge'}
+        status: {type: string, const: started}
+        startedAt: {type: string, format: date-time}
+        expiresAt: {type: string, format: date-time}
+    MissionChallenge:
+      oneOf:
+        - {$ref: '#/components/schemas/FlavorScoutChallenge'}
+        - {$ref: '#/components/schemas/CrunchCreatorChallenge'}
+        - {$ref: '#/components/schemas/SnackDetectiveChallenge'}
+        - {$ref: '#/components/schemas/QRRunnerChallenge'}
+    FlavorScoutChallenge:
+      type: object
+      additionalProperties: false
+      required: [kind, version, requiredOrder]
+      properties:
+        kind: {type: string, const: flavor_scout}
+        version: {type: integer, const: 1}
+        requiredOrder: {type: array, minItems: 3, maxItems: 3, uniqueItems: true, items: {type: string, enum: [Sunny Salt, Smoky BBQ, Zesty Lime]}}
+    CrunchCreatorChallenge:
+      type: object
+      additionalProperties: false
+      required: [kind, version, requiredOccasion]
+      properties:
+        kind: {type: string, const: crunch_creator}
+        version: {type: integer, const: 1}
+        requiredOccasion: {type: string, enum: [Movie night, Game night, Road trip, Study break]}
+    SnackDetectiveChallenge:
+      type: object
+      additionalProperties: false
+      required: [kind, version, variant, questions]
+      properties:
+        kind: {type: string, const: snack_detective}
+        version: {type: integer, const: 1}
+        variant: {type: string, enum: [squad, location]}
+        questions:
+          type: array
+          minItems: 2
+          maxItems: 2
+          items:
+            type: object
+            additionalProperties: false
+            required: [id, prompt, options]
+            properties:
+              id: {type: string, enum: [q1, q2]}
+              prompt: {type: string}
+              options: {type: array, minItems: 3, items: {type: string}}
+    QRRunnerChallenge:
+      type: object
+      additionalProperties: false
+      required: [kind, version]
+      properties:
+        kind: {type: string, const: qr_runner}
+        version: {type: integer, const: 1}
+    Event: {type: object, required: [name], properties: {name: {type: string}, squadId: {type: string}, role: {type: string}, sessionId: {type: string}, properties: {type: object, additionalProperties: true}}}
+    Error: {type: object, properties: {error: {type: object, properties: {code: {type: string}, message: {type: string}}}}}
+  responses:
+    SessionResponse: {description: Session created and HttpOnly cookie set, content: {application/json: {schema: {$ref: '#/components/schemas/Session'}}}}
+    Error: {description: Generic client-safe error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+  pathItems:
+    CsrfMutation:
+      tags: [Squads]
+      parameters: [{$ref: '#/components/parameters/Csrf'}]
+      responses: {'200': {description: Successful mutation}, '204': {description: Successful mutation without a body}, '403': {$ref: '#/components/responses/Error'}}
+
