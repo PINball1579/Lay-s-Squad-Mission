@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import type { FlavorCupVoteResult, Role } from '../types'
 import { copyText, type LineAdapter } from '../lib/liff'
+import { BrandHeader, CampaignFooter } from './Brand'
 
 type Track = (name: string, properties: Record<string, unknown>) => Promise<void>
 
@@ -19,18 +20,19 @@ type Props = {
 
 export function MissionRunner({ role, challenge, expiresAt, errorMessage, line, validateQR, onFlavorVote, track, onComplete, onBack }: Props) {
   return <main className="screen-enter mx-auto min-h-screen max-w-4xl px-4 py-5 sm:px-6">
-    <button className="mb-5 min-h-11 rounded-full bg-white/80 px-4 font-bold" onClick={onBack}>← กลับไปหาทีม</button>
-    <p className="mb-3 text-center text-sm font-bold">โจทย์นี้ใช้ได้ถึง {new Date(expiresAt).toLocaleTimeString('th-TH')}</p>
+    <BrandHeader label="MISSION IN PROGRESS" />
+    <div className="mb-5 flex flex-wrap items-center justify-between gap-3"><button className="min-h-11 rounded-full border border-crunch-ink/10 bg-white px-4 text-sm font-bold" onClick={onBack}>← กลับไปหาทีม</button><p className="text-xs text-crunch-ink/50">บันทึกรอบถึง {new Date(expiresAt).toLocaleString('th-TH', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</p></div>
     {errorMessage && <p role="alert" className="mb-3 rounded-xl bg-red-100 p-3 font-bold text-red-900">{errorMessage}</p>}
     {role === 'flavor_scout' && <CrunchHunt challenge={challenge} onComplete={onComplete} track={track} />}
     {role === 'crunch_creator' && <FlavorCup challenge={challenge} onVote={onFlavorVote} onComplete={onComplete} track={track} />}
     {role === 'snack_detective' && <SnackDetective challenge={challenge} onComplete={onComplete} />}
     {role === 'qr_runner' && <QRRunner line={line} validateQR={validateQR} onComplete={onComplete} />}
+    <CampaignFooter />
   </main>
 }
 
 function MissionShell({ eyebrow, title, children }: { eyebrow: string; title: string; children: React.ReactNode }) {
-  return <section className="interactive-card overflow-hidden rounded-[2rem] bg-white shadow-pop" aria-labelledby="mission-title"><header className="relative overflow-hidden bg-crunch-ink px-5 py-6 text-white sm:px-7"><div aria-hidden className="absolute -right-8 -top-12 h-36 w-36 rounded-full bg-crunch-yellow/20" /><div aria-hidden className="absolute -bottom-10 right-20 h-20 w-20 rounded-full bg-crunch-red/30" /><p className="relative text-sm font-black uppercase tracking-[.14em] text-crunch-yellow">{eyebrow}</p><h1 id="mission-title" className="relative mt-1 text-3xl font-black">{title}</h1></header><div className="p-4 sm:p-6">{children}</div></section>
+  return <section className="mission-shell overflow-hidden rounded-[2rem] bg-white shadow-pop" aria-labelledby="mission-title"><header className="relative overflow-hidden bg-crunch-ink px-5 py-6 text-white sm:px-7"><div aria-hidden className="absolute -right-8 -top-12 h-36 w-36 rounded-full bg-crunch-yellow/10" /><p className="relative text-xs font-black uppercase tracking-[.14em] text-crunch-yellow">{eyebrow}</p><h1 id="mission-title" className="relative mt-2 text-2xl font-black sm:text-3xl">{title}</h1></header><div className="p-4 sm:p-6">{children}</div></section>
 }
 
 function usePendingAction() {
@@ -109,6 +111,10 @@ export function CrunchHunt({ challenge = {}, onComplete, track = async () => und
     const rect = event.currentTarget.getBoundingClientRect()
     const x = (event.clientX - rect.left) / rect.width
     const y = (event.clientY - rect.top) / rect.height
+    if (differences.some(item => foundRef.current.has(item.id) && Math.hypot(x - item.x, y - item.y) <= item.radius)) {
+      setFeedback('จุดนี้พบแล้ว ลองหาจุดอื่นต่อได้เลย')
+      return
+    }
     const difference = differences.find((item) => !foundRef.current.has(item.id) && Math.hypot(x - item.x, y - item.y) <= item.radius)
     const elapsedMs = Date.now() - startedAt
     void track('crunch_hunt_tap', { x: Number(x.toFixed(4)), y: Number(y.toFixed(4)), correct: Boolean(difference), differenceId: difference?.id ?? '', elapsedMs })
@@ -133,6 +139,7 @@ export function CrunchHunt({ challenge = {}, onComplete, track = async () => und
   }
 
   const restart = () => {
+    if (!loadedRef.current.every(Boolean)) return
     void track('crunch_hunt_restarted', { foundCount: found.length })
     foundRef.current.clear()
     timeoutTrackedRef.current = false
@@ -141,7 +148,7 @@ export function CrunchHunt({ challenge = {}, onComplete, track = async () => und
     setFound([]); setHinted([]); setWrongTaps(0); setFindTimes({}); setTimeLeft(timerSeconds); setStartedAt(restartedAt); setFeedback('เริ่มรอบใหม่แล้ว')
   }
 
-  const finalScore = Math.max(0, found.length * scoring.basePerDifference + timeLeft * scoring.speedBonusPerSecond - wrongTaps * scoring.wrongTapPenalty - hinted.length * scoring.hintPenalty)
+  const finalScore = Math.max(0, found.length * scoring.basePerDifference + (complete ? timeLeft * scoring.speedBonusPerSecond : 0) - wrongTaps * scoring.wrongTapPenalty - hinted.length * scoring.hintPenalty)
   const finish = () => run(async () => {
     const completionMs = startedAt === null ? 0 : Math.min(timerSeconds * 1000, Date.now() - startedAt)
     const speedBonus = timeLeft * scoring.speedBonusPerSecond
@@ -150,6 +157,7 @@ export function CrunchHunt({ challenge = {}, onComplete, track = async () => und
   })
 
   return <MissionShell eyebrow="Crunch Hunter" title="Crunch Hunt — Spot the Shelf">
+    <p className="mb-4 text-sm leading-relaxed text-crunch-ink/65">ตามหาจุดต่างให้ครบ {differences.length} จุดก่อนหมดเวลา แตะภาพไหนก็ได้ จุดที่พบจะถูกวงไว้ทั้งสองภาพ ใช้สองนิ้วขยายเพื่อดูใกล้ขึ้น</p>
     <div className="grid grid-cols-3 gap-2 rounded-2xl bg-crunch-cream p-2 text-center"><div className="rounded-xl bg-white p-2"><small className="block text-crunch-ink/55">เวลา</small><strong>{timeLeft} วิ</strong></div><div className="rounded-xl bg-white p-2"><small className="block text-crunch-ink/55">เจอแล้ว</small><strong>{found.length}/{differences.length}</strong></div><div className="rounded-xl bg-white p-2"><small className="block text-crunch-ink/55">คะแนน</small><strong>{finalScore}</strong></div></div>
     {!loaded.every(Boolean) && <p role="status" className="mt-3 rounded-xl bg-crunch-yellow/30 p-3 font-bold">กำลังโหลดภาพทั้งสองภาพ — เวลาจะยังไม่เริ่ม</p>}
     <div className="mt-4 grid gap-3 sm:grid-cols-2" aria-label="ภาพจับผิดชั้นวาง">
@@ -173,6 +181,8 @@ export function FlavorCup({ challenge, onVote, onComplete, track = async () => u
   const [tournament, setTournament] = useState(() => challenge.tournament as CupTournament)
   const [busy, setBusy] = useState(false)
   const [shared, setShared] = useState(false)
+  const [error, setError] = useState('')
+  const { pending: finishing, run: finishAction } = usePendingAction()
   const shareCard = { title: 'My Flavor Champion', accent: '#d93b2b', message: "แชมป์รสชาติของฉันคือ {flavor} จาก Lay's Crunch Squad", ...(challenge.shareCard as Partial<CupShareCard> ?? {}) }
   const matchStartedAt = useRef(0)
   const missionStartedAt = useRef(0)
@@ -195,6 +205,7 @@ export function FlavorCup({ challenge, onVote, onComplete, track = async () => u
 
   const choose = async (winnerId: string) => {
     if (!current || busy) return
+    setError('')
     setBusy(true)
     try {
       const result = await onVote(current.id, winnerId, Date.now() - matchStartedAt.current)
@@ -202,7 +213,8 @@ export function FlavorCup({ challenge, onVote, onComplete, track = async () => u
       setTournament(next)
       matchStartedAt.current = Date.now()
       if (next.completed) await track('flavor_cup_completed', { championId: next.championId ?? '', matchCount: next.matches.length, completionMs: Date.now() - missionStartedAt.current })
-    } finally { setBusy(false) }
+    } catch { setError('บันทึกคำตอบไม่สำเร็จ ตรวจสอบการเชื่อมต่อแล้วเลือกรสนี้อีกครั้งได้เลย') }
+    finally { setBusy(false) }
   }
 
   const share = async () => {
@@ -217,14 +229,15 @@ export function FlavorCup({ challenge, onVote, onComplete, track = async () => u
     await track('flavor_cup_result_shared', { championId: champion.id, shareSurface: 'result-card', result })
   }
 
-  const finish = () => onComplete({ championId: tournament.championId, matchCount: tournament.matches.length, completionMs: Date.now() - missionStartedAt.current })
+  const finish = () => finishAction(() => onComplete({ championId: tournament.championId, matchCount: tournament.matches.length, completionMs: Date.now() - missionStartedAt.current }))
 
   return <MissionShell eyebrow="Flavor Referee" title="Flavor Cup — Crown Your Crunch">
+    {error && <p role="alert" className="mb-4 rounded-xl bg-red-50 p-4 text-sm text-red-900">{error}</p>}
     {!tournament.completed && <><div className="rounded-2xl bg-crunch-cream p-4"><div className="flex items-end justify-between gap-3"><div><p className="text-sm font-black text-crunch-red">เส้นทางสู่แชมป์</p><p className="font-bold">เลือกไปแล้ว {tournament.selectionCount} จาก {totalSelections} คู่</p></div><strong className="text-2xl">{progress}%</strong></div><div className="mt-3 h-3 overflow-hidden rounded-full bg-white"><div className="h-full rounded-full bg-crunch-red transition-[width] duration-500" style={{ width: `${progress}%` }} /></div></div><p className="mt-4 text-center text-crunch-ink/65">เลือกรสที่ใช่ในแต่ละคู่ ระบบบันทึกคำตอบให้อัตโนมัติ</p></>}
     {!tournament.completed && current && <section key={current.id} className="match-enter relative mt-5 overflow-hidden rounded-[2rem] bg-gradient-to-br from-crunch-cream to-white p-4 shadow-inner sm:p-6" aria-label="คู่แข่งขันปัจจุบัน"><p className="text-center text-sm font-black text-crunch-red">รอบ {current.round} · คู่ที่ {tournament.selectionCount + 1} จาก {totalSelections}</p><div className="mt-4 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-stretch gap-2 sm:gap-4"><FlavorChoice value={flavor(current.leftId)} side="ซ้าย" disabled={busy} onChoose={choose} /><span className="shine self-center rounded-full bg-crunch-ink px-2.5 py-3 text-sm font-black text-crunch-yellow shadow-lg sm:px-3 sm:text-base">VS</span><FlavorChoice value={flavor(current.rightId)} side="ขวา" disabled={busy} onChoose={choose} /></div>{busy && <div className="absolute inset-0 grid place-items-center bg-white/70 backdrop-blur-sm"><span className="rounded-full bg-crunch-ink px-5 py-3 font-black text-white">กำลังส่งผู้ชนะเข้ารอบ…</span></div>}</section>}
     {tournament.completed && champion && <section className="toast-pop relative mt-2 overflow-hidden rounded-[2rem] border-4 bg-crunch-ink p-6 text-center text-white" style={{ borderColor: shareCard.accent }} aria-label="My Flavor Champion result card"><div aria-hidden className="absolute inset-0 opacity-20"><span className="absolute left-5 top-5 text-4xl">✦</span><span className="absolute right-6 top-16 text-2xl">✦</span><span className="absolute bottom-8 left-12 text-2xl">✦</span></div><p className="relative text-sm font-black uppercase tracking-[.18em]" style={{ color: shareCard.accent }}>{shareCard.title}</p><div className="relative mx-auto mt-4 aspect-square w-40 overflow-hidden rounded-[2rem] border-4 border-white/30 bg-white"><img src={champion.image} alt="ผลิตภัณฑ์ตัวอย่าง" className="h-full w-full object-cover" /></div><h2 className="relative mt-3 text-4xl font-black">{champion.name}</h2><p className="relative text-white/75">{champion.description}</p><p className="relative mt-3 text-sm text-white/70">ชนะต่อเนื่อง {tournament.matches.filter((match) => match.winnerId === champion.id).length} รอบจนคว้ามงกุฎ</p><button onClick={() => void share()} className="relative mt-5 min-h-12 rounded-2xl px-6 font-black text-crunch-ink" style={{ backgroundColor: shareCard.accent }}>{shared ? 'แชร์ผลแล้ว ✓' : 'แชร์แชมป์ของฉัน'}</button></section>}
     {tournament.completed && <TournamentBracket tournament={tournament} flavor={flavor} />}
-    {tournament.completed && <button onClick={() => void finish()} className="mt-4 min-h-14 w-full rounded-2xl bg-crunch-red font-black text-white">ยืนยันแชมป์และจบภารกิจ</button>}
+    {tournament.completed && <button disabled={finishing} onClick={() => void finish()} className="mt-4 min-h-14 w-full rounded-2xl bg-crunch-red font-black text-white disabled:opacity-50">{finishing ? 'กำลังบันทึกภารกิจ…' : 'ยืนยันแชมป์และจบภารกิจ'}</button>}
   </MissionShell>
 }
 
@@ -242,7 +255,7 @@ function TournamentBracket({ tournament, flavor }: { tournament: CupTournament; 
     if (remaining === 2) return 'รอบชิงชนะเลิศ'
     return `รอบ ${remaining} รส`
   }
-  return <section className="mt-7 rounded-[2rem] bg-crunch-cream p-4 sm:p-5" aria-label="สายการแข่งขัน"><div className="flex items-end justify-between gap-3"><div><p className="text-sm font-black text-crunch-red">เส้นทางการแข่งขันทั้งหมด</p><h2 className="text-2xl font-black">Tournament bracket</h2></div><span className="rounded-full bg-white px-3 py-2 text-xs font-bold">เลื่อนดูด้านข้าง →</span></div><div className="bracket-scroll mt-4 overflow-x-auto pb-4"><div className="flex min-w-max gap-6 rounded-3xl bg-white/65 p-4" style={{ height: `${bracketHeight + 64}px` }}>{Array.from({ length: rounds }, (_, offset) => offset + 1).map((round) => <div key={round} className="bracket-column flex w-48 shrink-0 flex-col"><h3 className="h-12 text-center text-sm font-black text-crunch-red">{roundTitle(round)}</h3><div className="grid min-h-0 flex-1" style={{ gridTemplateRows: `repeat(${tournament.bracketSize}, minmax(0, 1fr))` }}>{tournament.matches.filter((match) => match.round === round).map((match) => { const span = 2 ** round; const start = match.index * span + 1; const left = flavor(match.leftId); const right = flavor(match.rightId); return <article key={match.id} className="bracket-match self-center rounded-2xl border border-crunch-ink/10 bg-white p-2 shadow-sm" style={{ gridRow: `${start} / span ${span}` }}><BracketFlavor value={left} winner={match.winnerId === match.leftId} /><div className="my-1 h-px bg-crunch-ink/10" /><BracketFlavor value={right} winner={match.winnerId === match.rightId} /></article> })}</div></div>)}</div></div><p className="mt-2 text-center text-xs text-crunch-ink/50">ภาพอ้างอิงโดย <a className="underline" href="https://commons.wikimedia.org/wiki/User:Famartin" target="_blank" rel="noreferrer">Famartin</a> / CC BY-SA 4.0 · รายการรสชาติปรับได้จากการตั้งค่าแคมเปญ</p></section>
+  return <section className="mt-7 rounded-[2rem] bg-crunch-cream p-4 sm:p-5" aria-label="สายการแข่งขัน"><div className="flex items-end justify-between gap-3"><div><p className="text-sm font-black text-crunch-red">เส้นทางการแข่งขันทั้งหมด</p><h2 className="text-2xl font-black">Tournament bracket</h2></div><span className="rounded-full bg-white px-3 py-2 text-xs font-bold">เลื่อนดูด้านข้าง →</span></div><div className="bracket-scroll mt-4 overflow-x-auto pb-4"><div className="flex min-w-max gap-6 rounded-3xl bg-white/65 p-4" style={{ height: `${bracketHeight + 64}px` }}>{Array.from({ length: rounds }, (_, offset) => offset + 1).map((round) => <div key={round} className="bracket-column flex w-48 shrink-0 flex-col"><h3 className="h-12 text-center text-sm font-black text-crunch-red">{roundTitle(round)}</h3><div className="grid min-h-0 flex-1" style={{ gridTemplateRows: `repeat(${tournament.bracketSize}, minmax(0, 1fr))` }}>{tournament.matches.filter((match) => match.round === round).map((match) => { const span = 2 ** round; const start = match.index * span + 1; const left = flavor(match.leftId); const right = flavor(match.rightId); return <article key={match.id} className="bracket-match self-center rounded-2xl border border-crunch-ink/10 bg-white p-2 shadow-sm" style={{ gridRow: `${start} / span ${span}` }}><BracketFlavor value={left} winner={match.winnerId === match.leftId} /><div className="my-1 h-px bg-crunch-ink/10" /><BracketFlavor value={right} winner={match.winnerId === match.rightId} /></article> })}</div></div>)}</div></div><p className="mt-2 text-center text-xs text-crunch-ink/50">ภาพอ้างอิงโดย <a className="underline" href="https://commons.wikimedia.org/wiki/User:Famartin" target="_blank" rel="noreferrer">Famartin</a> / CC BY-SA 4.0</p></section>
 }
 
 function BracketFlavor({ value, winner }: { value?: CupFlavor; winner: boolean }) {

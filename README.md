@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/PINball1579/Lay-s-Squad-Mission/actions/workflows/ci.yml/badge.svg)](https://github.com/PINball1579/Lay-s-Squad-Mission/actions/workflows/ci.yml)
 
-A mobile-first Thai cooperative LIFF campaign experience. Four LINE users form a squad, lock unique roles, complete four different missions, and unlock a team reward. The player journey, invitation card, missions, and admin experience are production-facing; local mode retains fixture identities, QR codes, and reward inventory for repeatable testing.
+A mobile-first Thai cooperative LIFF campaign experience. Four LINE users form a squad, lock unique roles, complete four different missions, and unlock a team reward. The campaign interface includes a responsive landing page, team roster, mission states, invite sharing, and a Thai operations dashboard. Local mode retains explicit test accounts, QR fixtures, and reward inventory for repeatable testing. See [campaign handoff](docs/CAMPAIGN_HANDOFF.md) for the confirmed coupon direction and the remaining hosting, LIFF, asset, and fulfillment setup.
 
 ## Repository layout
 
@@ -59,7 +59,7 @@ Go 1.27 and Node 24 are the pinned container toolchains. Local Go caches can be 
 ## Local QA journey
 
 1. Sign in as a mock user and accept required consent. Optional analytics may remain off.
-2. Create a squad and generate the branded invitation card.
+2. Create a squad and copy/share its invitation link.
 3. Open the invitation link in separate private browser contexts. Each invited player chooses an identity, accepts consent, and is joined automatically without re-entering a code.
 4. Lock each unique role and complete its mission.
    - **Crunch Hunter:** find all configured differences in the two shelf images before time expires.

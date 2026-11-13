@@ -10,7 +10,7 @@ ARG VITE_MOCK_LIFF=true
 ARG VITE_LIFF_ID=
 ARG VITE_SHARE_IMAGE_URL=
 ENV VITE_MOCK_LIFF=$VITE_MOCK_LIFF VITE_LIFF_ID=$VITE_LIFF_ID VITE_SHARE_IMAGE_URL=$VITE_SHARE_IMAGE_URL
-RUN npm run build
+RUN npm run build && chmod -R a+rX dist
 
 FROM nginxinc/nginx-unprivileged:1.27-alpine
 COPY --chmod=0644 nginx.conf /etc/nginx/conf.d/default.conf

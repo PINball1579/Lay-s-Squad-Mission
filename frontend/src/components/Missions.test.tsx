@@ -80,6 +80,15 @@ describe('replacement mission interactions', () => {
     await userEvent.click(screen.getByRole('button', { name: /ยืนยันแชมป์และจบภารกิจ/ }))
     expect(complete).toHaveBeenCalledWith(expect.objectContaining({ championId: 'a', matchCount: 3 }))
   })
+
+  it('keeps the current matchup available when saving a vote fails', async () => {
+    const onVote = vi.fn().mockRejectedValue(new Error('offline'))
+    render(<FlavorCup challenge={{ tournament: cupTournament }} onVote={onVote} onComplete={vi.fn()} />)
+    await userEvent.click(screen.getByRole('button', { name: 'เลือก A' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('บันทึกคำตอบไม่สำเร็จ')
+    expect(screen.getByRole('button', { name: 'เลือก A' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'เลือก B' })).toBeEnabled()
+  })
 })
 
 describe('preserved missions', () => {
