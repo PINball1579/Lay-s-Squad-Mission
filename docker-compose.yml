@@ -52,6 +52,8 @@ services:
       PSEUDONYM_KEY: ${PSEUDONYM_KEY:-local-pseudonym-key-change-me-32-bytes}
       ADMIN_API_TOKEN: ${ADMIN_API_TOKEN:-local-admin-demo-token}
       LINE_CHANNEL_ID: ${LINE_CHANNEL_ID:-}
+      LINE_LIFF_ID: ${VITE_LIFF_ID:-}
+      LINE_CHANNEL_ACCESS_TOKEN: ${LINE_CHANNEL_ACCESS_TOKEN:-}
       IAPP_API_KEY: ${IAPP_API_KEY:-}
       IAPP_OCR_ENDPOINT: ${IAPP_OCR_ENDPOINT:-https://api.iapp.co.th/v3/store/ocr/document/ocr}
     ports:

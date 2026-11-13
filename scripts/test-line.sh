@@ -75,6 +75,19 @@ if ! compose config --environment | awk '
   exit 1
 fi
 
+if ! compose config --environment | awk '
+  /^LINE_CHANNEL_ACCESS_TOKEN=/ {
+    value = substr($0, length("LINE_CHANNEL_ACCESS_TOKEN=") + 1)
+    if (value !~ /^[[:space:]]*$/) configured = 1
+  }
+  END { exit !configured }
+'; then
+  echo 'LINE completion cards need the Messaging API channel access token.' >&2
+  echo 'Run: bash scripts/configure-line-messaging.sh' >&2
+  echo 'An exported LINE_CHANNEL_ACCESS_TOKEN overrides .env; unset it if empty.' >&2
+  exit 1
+fi
+
 echo 'Creating a temporary HTTPS link...'
 cloudflared tunnel --url http://127.0.0.1:5174 --protocol http2 --no-autoupdate \
   > .line-test/tunnel.log 2>&1 &
@@ -114,6 +127,7 @@ fi
 printf '\nLINE test is ready. In LINE Developers → LINE Login channel %s → LIFF → %s:\n' "$LINE_CHANNEL_ID" "$VITE_LIFF_ID"
 printf 'Set Endpoint URL to: %s\n' "$ALLOWED_ORIGIN"
 printf 'Enable openid and profile scopes. Save, then open on your phone:\nhttps://liff.line.me/%s\n' "$VITE_LIFF_ID"
+printf 'Enable Share target picker, link your Official Account, and add it as a friend for completion cards.\n'
 printf '\nKeep this terminal open. Ctrl+C stops this test session and preserves its data.\n'
 printf 'The HTTPS address changes each time; update the LIFF Endpoint URL after restarting.\n'
 wait "$tunnel_pid"

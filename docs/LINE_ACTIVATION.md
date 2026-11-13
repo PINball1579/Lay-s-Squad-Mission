@@ -14,6 +14,8 @@ real LINE accounts and receipt photos on your phone first.
 2. Add a LIFF app to that channel. Set its endpoint to your public HTTPS app
    URL, choose Full view, and enable `openid` and `profile` scopes. Enable the
    share target picker if invitation sharing will be used.
+   Link the campaign Official Account from the same provider and configure
+   `LINE_CHANNEL_ACCESS_TOKEN` for completion cards. See [LINE messages](LINE_MESSAGES.md).
 3. Add the required callback/endpoint settings for that channel and register
    developer/tester accounts while the channel is in development status.
 4. Set `MOCK_LIFF=false`, `VITE_LIFF_ID` to the LIFF app ID, and

@@ -68,35 +68,40 @@ type SessionStore interface {
 }
 
 type ServerConfig struct {
-	ReceiptOCR    ReceiptOCR
-	Game          GameStore
-	SessionStore  SessionStore
-	LineVerifier  LineVerifier
-	AllowMockAuth bool
-	AllowedOrigin string
-	AdminToken    string
-	PseudonymKey  []byte
-	QRSecret      []byte
-	SecureCookies bool
-	TrustProxy    bool
-	Logger        *slog.Logger
+	CompletionMessenger CompletionMessenger
+	ReceiptOCR          ReceiptOCR
+	Game                GameStore
+	SessionStore        SessionStore
+	LineVerifier        LineVerifier
+	AllowMockAuth       bool
+	AllowedOrigin       string
+	AdminToken          string
+	PseudonymKey        []byte
+	QRSecret            []byte
+	SecureCookies       bool
+	TrustProxy          bool
+	Logger              *slog.Logger
 }
 
 type Server struct {
-	receiptOCR    ReceiptOCR
-	receiptSlots  chan struct{}
-	game          GameStore
-	sessionStore  SessionStore
-	lineVerifier  LineVerifier
-	allowMockAuth bool
-	allowedOrigin string
-	adminToken    string
-	pseudonymKey  []byte
-	qr            *security.QRSigner
-	secureCookies bool
-	trustProxy    bool
-	logger        *slog.Logger
-	mux           *http.ServeMux
+	completionMessenger   CompletionMessenger
+	notificationStore     CompletionNotificationStore
+	acceptedNotifications map[string]bool
+	notificationSnapshots map[string]domain.Squad
+	receiptOCR            ReceiptOCR
+	receiptSlots          chan struct{}
+	game                  GameStore
+	sessionStore          SessionStore
+	lineVerifier          LineVerifier
+	allowMockAuth         bool
+	allowedOrigin         string
+	adminToken            string
+	pseudonymKey          []byte
+	qr                    *security.QRSigner
+	secureCookies         bool
+	trustProxy            bool
+	logger                *slog.Logger
+	mux                   *http.ServeMux
 
 	sessionMu sync.RWMutex
 	sessions  map[string]session
@@ -142,13 +147,17 @@ func New(config ServerConfig) *Server {
 		panic(err)
 	}
 	server := &Server{
-		receiptOCR: config.ReceiptOCR, receiptSlots: make(chan struct{}, 4),
+		completionMessenger:   config.CompletionMessenger,
+		acceptedNotifications: make(map[string]bool),
+		notificationSnapshots: make(map[string]domain.Squad),
+		receiptOCR:            config.ReceiptOCR, receiptSlots: make(chan struct{}, 4),
 		game: config.Game, sessionStore: config.SessionStore, lineVerifier: config.LineVerifier, allowMockAuth: config.AllowMockAuth,
 		allowedOrigin: config.AllowedOrigin, adminToken: config.AdminToken,
 		pseudonymKey: append([]byte(nil), config.PseudonymKey...), qr: qr,
 		secureCookies: config.SecureCookies, logger: config.Logger,
 		trustProxy: config.TrustProxy, sessions: make(map[string]session), rates: make(map[string]rateWindow), mux: http.NewServeMux(),
 	}
+	server.notificationStore, _ = config.Game.(CompletionNotificationStore)
 	server.routes()
 	return server
 }
@@ -249,9 +258,7 @@ func (s *Server) authLine(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, "authentication_failed", "Authentication failed")
 		return
 	}
-	mac := hmac.New(sha256.New, s.pseudonymKey)
-	_, _ = mac.Write([]byte(identity.Subject))
-	user := domain.User{ID: "line:" + hex.EncodeToString(mac.Sum(nil)), DisplayName: identity.DisplayName}
+	user := domain.User{ID: s.lineUserID(identity.Subject), DisplayName: identity.DisplayName}
 	if user.DisplayName == "" {
 		user.DisplayName = "Crunch Player"
 	}
@@ -519,6 +526,7 @@ func (s *Server) completeMission(w http.ResponseWriter, r *http.Request) {
 	var request struct {
 		AttemptID  string         `json:"attemptId"`
 		Properties map[string]any `json:"properties"`
+		IDToken    string         `json:"idToken,omitempty"`
 	}
 	if !decodeBody(w, r, &request) {
 		return
@@ -556,7 +564,11 @@ func (s *Server) completeMission(w http.ResponseWriter, r *http.Request) {
 	if created {
 		s.game.RecordEvent(sess.UserID, domain.AnalyticsEvent{Name: "mission_completed", SessionID: sess.ID, SquadID: squad.ID, Role: role, Properties: analyticsMissionProperties(role, request.Properties)})
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"squad": squad, "completion": completion})
+	// Notification failure never rolls back a successfully completed mission.
+	// Exact completion replays use the same LINE retry key, preventing duplicates.
+	notification := s.notifyCompletion(r.Context(), sess.UserID, request.IDToken, squad, completion)
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, map[string]any{"squad": squad, "completion": completion, "notification": notification})
 }
 
 func (s *Server) validateQR(w http.ResponseWriter, r *http.Request) {

@@ -68,8 +68,8 @@ export const api = {
   startMission: (id: string, role: Role) => post<MissionAttempt>(`/squads/${id}/missions/${role}/start`, {}),
   flavorCupVote: (squadId: string, attemptId: string, matchId: string, winnerId: string, decisionMs: number) =>
     post<FlavorCupVoteResult>(`/squads/${squadId}/missions/flavor-cup/${attemptId}/vote`, { matchId, winnerId, decisionMs }),
-  completeMission: (id: string, role: Role, attemptId: string, properties: Record<string, unknown>) =>
-    post<{ squad: Squad }>(`/squads/${id}/missions/${role}/complete`, { attemptId, properties }, { 'Idempotency-Key': stableIdempotencyKey(`mission:${id}:${role}`) }),
+  completeMission: (id: string, role: Role, attemptId: string, properties: Record<string, unknown>, idToken?: string | null) =>
+    post<{ squad: Squad; notification?: string }>(`/squads/${id}/missions/${role}/complete`, { attemptId, properties, ...(idToken ? { idToken } : {}) }, { 'Idempotency-Key': stableIdempotencyKey(`mission:${id}:${role}`) }),
   verifyReceipt: (attemptId:string,file:File) => {const body=new FormData();body.append('file',file);body.append('receiptConsent','true');return request<{verified:boolean;brand:string}>(`/missions/receipts/${attemptId}/verify`,{method:'POST',body})},
   redeem: (id: string) => post<Squad>(`/squads/${id}/reward/redeem`, {}, { 'Idempotency-Key': stableIdempotencyKey(`reward:${id}`) }),
   reward: (id: string) => request<RewardDetails>(`/squads/${id}/reward`, { cache: 'no-store' }),

@@ -20,7 +20,7 @@ async function claim(page: Page, name: string) {
   await expect(roleCard(page, name).getByRole('button', { name: /เริ่มภารกิจของฉัน/i })).toBeVisible()
 }
 
-test('four-player journey, race handling, consent, QR, reward, and dashboard', async ({ baseURL }) => {
+test('four-player journey, race handling, consent, receipt OCR, reward, and dashboard', async ({ baseURL }) => {
   const browser = process.env.PLAYWRIGHT_CDP_ENDPOINT
     ? await chromium.connectOverCDP(process.env.PLAYWRIGHT_CDP_ENDPOINT)
     : await chromium.launch(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH
@@ -41,7 +41,9 @@ test('four-player journey, race handling, consent, QR, reward, and dashboard', a
   const invite = createBody.invitation.token as string
   await expect(mali.getByRole('region', { name: 'ภารกิจของทีม' })).toBeVisible()
   await mali.getByRole('button', { name: 'ชวนเพื่อนเข้าทีม' }).click()
-  await expect(mali.getByRole('status')).toContainText('คัดลอกแล้ว!')
+  await expect(mali.getByRole('status')).toContainText('เปิดแอปนี้ผ่าน LINE')
+  await mali.getByRole('button', { name: 'คัดลอกลิงก์สำหรับทดสอบ', exact: true }).click()
+  await expect(mali.getByRole('status').filter({hasText:'คัดลอกลิงก์สำหรับทดสอบแล้ว'})).toBeVisible()
   await expect(mali.getByRole('region', { name: 'การ์ดเชิญเข้าร่วมทีม' })).toHaveCount(0)
 
   await login(nok, 'nok', invite, false)

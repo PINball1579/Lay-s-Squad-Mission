@@ -1,6 +1,8 @@
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
+import { lineAdapter } from './lib/liff'
 
 afterEach(() => {
   cleanup()
@@ -55,5 +57,38 @@ describe('LIFF bootstrap states', () => {
     expect(screen.getAllByRole('button', { name: 'ล็อกภารกิจนี้' })).toHaveLength(4)
     expect(screen.queryByLabelText(/Invitation code/i)).not.toBeInTheDocument()
     expect(window.location.search).toBe('')
+  })
+})
+
+describe('invite friend picker flow', () => {
+  it.each(['sent', 'cancelled'] as const)('prepares the link before the tap and handles %s accurately', async (result) => {
+    const squad = { id: 'squad-share', campaignId: 'demo-campaign', name: 'ทีมกรุบกรอบ', status: 'active', members: [{ userId: 'mock:mali', displayName: 'Mali', completed: false, joinedAt: new Date().toISOString() }], rewardUnlocked: false, rewardRedeemed: false, createdAt: new Date().toISOString() }
+    let provideInvite: (value: ReturnType<typeof response>) => void = () => undefined
+    const invitationResponse = new Promise<ReturnType<typeof response>>(resolve => { provideInvite = resolve })
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url.endsWith('/me')) return response({ user: { id: 'mock:mali', displayName: 'Mali' }, consent: { requiredAccepted: true, analyticsAllowed: false }, csrfToken: 'csrf', squad })
+      if (url.endsWith('/invitations')) return invitationResponse
+      if (url.endsWith('/events')) { expect(init?.method).toBe('POST'); return response({ stored: false }) }
+      if (url.endsWith('/squads/squad-share')) return response(squad)
+      throw new Error(`Unexpected request: ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const share = vi.spyOn(lineAdapter, 'share').mockResolvedValue(result)
+    render(<App />)
+    expect(await screen.findByRole('button', { name: 'กำลังเตรียมคำเชิญ…' })).toBeDisabled()
+    provideInvite(response({ token: 'ready-before-tap', squadId: squad.id, expiresAt: new Date(Date.now() + 600_000).toISOString() }))
+    const invite = await screen.findByRole('button', { name: 'ชวนเพื่อนเข้าทีม' })
+    await waitFor(() => expect(invite).toBeEnabled())
+    const preparedRequests = fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/invitations')).length
+    await userEvent.click(invite)
+    expect(share).toHaveBeenCalledWith(expect.objectContaining({ squadName: squad.name, url: expect.stringContaining('invite=ready-before-tap') }))
+    expect(fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/invitations'))).toHaveLength(preparedRequests)
+    if (result === 'sent') expect(await screen.findByText('ส่งการ์ดชวนเพื่อนใน LINE แล้ว!')).toBeInTheDocument()
+    else {
+      expect(await screen.findByText('ยังไม่ได้ส่งคำเชิญ เลือกเพื่อนแล้วส่งได้ทุกเมื่อ')).toBeInTheDocument()
+      expect(screen.queryByText('ส่งการ์ดชวนเพื่อนใน LINE แล้ว!')).not.toBeInTheDocument()
+      expect(fetchMock.mock.calls.filter(([url, init]) => String(url).endsWith('/events') && String((init as RequestInit | undefined)?.body).includes('share_completed'))).toHaveLength(0)
+    }
   })
 })

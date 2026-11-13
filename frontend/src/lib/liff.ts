@@ -4,7 +4,7 @@ export interface LineAdapter {
   initialize(): Promise<void>
   getIDToken(): string | null
   login(): void
-  share(invite: ShareInvitation): Promise<boolean>
+  share(invite: ShareInvitation): Promise<ShareResult>
   scanQR(): Promise<string | null>
 }
 
@@ -12,6 +12,24 @@ export type ShareInvitation = {
   url: string
   squadName: string
   expiresLabel: string
+}
+
+export type ShareResult = 'sent' | 'cancelled' | 'unavailable'
+
+export function invitationURL(token: string) {
+  const liffId = import.meta.env.VITE_LIFF_ID
+  const base = liffId ? `https://liff.line.me/${liffId}/` : `${window.location.origin}${window.location.pathname}`
+  return `${base}?invite=${encodeURIComponent(token)}`
+}
+
+export function readInviteToken() {
+  const params = new URLSearchParams(window.location.search)
+  const direct = params.get('invite')
+  if (direct) return direct
+  // LIFF passes extra query parameters in liff.state on its first redirect.
+  const state = params.get('liff.state')
+  if (!state) return ''
+  try { return new URL(state, window.location.origin).searchParams.get('invite') ?? '' } catch { return '' }
 }
 
 export class RealLineAdapter implements LineAdapter {
@@ -28,14 +46,14 @@ export class RealLineAdapter implements LineAdapter {
 
   getIDToken() { return liff.getIDToken() }
   login() {
-    const invite = new URLSearchParams(window.location.search).get('invite')
+    const invite = readInviteToken()
     if (invite) { try { sessionStorage.setItem('crunch:login-invite', invite) } catch { /* URL remains the fallback. */ } }
     liff.login({ redirectUri: window.location.href })
   }
 
-  async share(invite: ShareInvitation) {
-    if (!liff.isApiAvailable('shareTargetPicker')) return false
-    const heroUrl = import.meta.env.VITE_SHARE_IMAGE_URL || 'https://thumb.wikimedia.org/wikipedia/commons/thumb/6/67/Lay%27s_logo_2019.svg/960px-Lay%27s_logo_2019.svg.png'
+  async share(invite: ShareInvitation): Promise<ShareResult> {
+    if (!liff.isApiAvailable('shareTargetPicker')) return 'unavailable'
+    const heroUrl = import.meta.env.VITE_SHARE_IMAGE_URL || new URL('/brand/lays-classic.jpg', window.location.origin).href
     const messages = [{
       type: 'flex',
       altText: `มาเข้าทีม ${invite.squadName} ใน Lay's Crunch Squad`,
@@ -57,8 +75,8 @@ export class RealLineAdapter implements LineAdapter {
         },
       },
     }] as Parameters<typeof liff.shareTargetPicker>[0]
-    await liff.shareTargetPicker(messages)
-    return true
+    const result = await liff.shareTargetPicker(messages, { isMultiple: true })
+    return result?.status === 'success' ? 'sent' : 'cancelled'
   }
 
   async scanQR() {
@@ -72,19 +90,13 @@ export class MockLineAdapter implements LineAdapter {
   async initialize() { return undefined }
   getIDToken(): string | null { return null }
   login() { return undefined }
-  async share() { return false }
+  async share(): Promise<ShareResult> { return 'unavailable' }
   async scanQR() { return 'mock:demo-store' }
 }
 
 export const lineAdapter: LineAdapter = import.meta.env.VITE_MOCK_LIFF === 'false'
   ? new RealLineAdapter()
   : new MockLineAdapter()
-
-export async function shareOrCopy(adapter: LineAdapter, invite: ShareInvitation) {
-  if (await adapter.share(invite)) return 'line'
-  await copyText(invite.url)
-  return 'clipboard'
-}
 
 export async function copyText(value: string) {
   if (navigator.clipboard?.writeText) {

@@ -7,6 +7,10 @@ A mobile-first Thai cooperative LIFF campaign experience. Four LINE users form a
 To test real LINE accounts on a phone before you have a domain, use the
 [temporary HTTPS setup](docs/LINE_TESTING.md): `bash scripts/test-line.sh`.
 
+Invitations use LINE's friend picker to send Flex cards. Completed missions
+request Thai congratulations cards from the linked Official Account; see
+[LINE messaging setup](docs/LINE_MESSAGES.md) for the token and account settings.
+
 ## Repository layout
 
 ```text

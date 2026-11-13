@@ -83,9 +83,14 @@ func main() {
 	if key := os.Getenv("IAPP_API_KEY"); key != "" {
 		receiptOCR = ocr.OpenThai{APIKey: key, URL: env("IAPP_OCR_ENDPOINT", ocr.Endpoint)}
 	}
+	var messenger httpapi.CompletionMessenger
+	if token := os.Getenv("LINE_CHANNEL_ACCESS_TOKEN"); token != "" && os.Getenv("LINE_LIFF_ID") != "" {
+		messenger = lineadapter.Messenger{AccessToken: token, LIFFID: os.Getenv("LINE_LIFF_ID")}
+	}
 	server := httpapi.New(httpapi.ServerConfig{
-		ReceiptOCR: receiptOCR,
-		Game:       game, SessionStore: sessions, LineVerifier: verifier, AllowMockAuth: mockMode,
+		CompletionMessenger: messenger,
+		ReceiptOCR:          receiptOCR,
+		Game:                game, SessionStore: sessions, LineVerifier: verifier, AllowMockAuth: mockMode,
 		AllowedOrigin: env("ALLOWED_ORIGIN", "http://localhost:5173"),
 		AdminToken:    adminToken, PseudonymKey: []byte(pseudonymKey),
 		QRSecret: []byte(qrSecret), SecureCookies: secureCookies, Logger: logger,
