@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -214,7 +215,7 @@ func TestPersistenceAndConcurrentRoleClaim(t *testing.T) {
 		go func() {
 			defer wait.Done()
 			<-start
-			_, claimErr := store.ClaimRole(userID, squad.ID, domain.FlavorScout)
+			_, claimErr := store.ClaimRole(userID, squad.ID, domain.CrunchHunter)
 			results <- claimErr
 		}()
 	}
@@ -296,6 +297,9 @@ func TestConcurrentFinalCompletionsUnlockExactlyOnce(t *testing.T) {
 		attempt, err := store.StartMission(users[index].ID, squad.ID, role)
 		if err != nil {
 			t.Fatal(err)
+		}
+		if role == domain.FlavorReferee {
+			attempt = finishPostgresFlavorCup(t, store, users[index].ID, squad.ID, attempt)
 		}
 		if _, _, _, err := store.CompleteMission(users[index].ID, squad.ID, role, attempt.ID, fmt.Sprintf("first-%d", index), attemptProperties(role, attempt.Challenge)); err != nil {
 			t.Fatal(err)
@@ -387,78 +391,84 @@ func TestMissionAttemptValidationAndReplay(t *testing.T) {
 	if _, err = store.JoinSquad(member.ID, invitation.Token); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = store.ClaimRole(owner.ID, squad.ID, domain.FlavorScout); err != nil {
+	if _, err = store.ClaimRole(owner.ID, squad.ID, domain.CrunchHunter); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = store.ClaimRole(member.ID, squad.ID, domain.CrunchCreator); err != nil {
+	if _, err = store.ClaimRole(member.ID, squad.ID, domain.FlavorReferee); err != nil {
 		t.Fatal(err)
 	}
 
-	first, err := store.StartMission(owner.ID, squad.ID, domain.FlavorScout)
+	first, err := store.StartMission(owner.ID, squad.ID, domain.CrunchHunter)
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := store.StartMission(owner.ID, squad.ID, domain.FlavorScout)
+	second, err := store.StartMission(owner.ID, squad.ID, domain.CrunchHunter)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, _, _, err = store.CompleteMission(owner.ID, squad.ID, domain.FlavorScout, first.ID, "superseded", attemptProperties(domain.FlavorScout, first.Challenge)); !errors.Is(err, service.ErrAttemptInvalid) {
+	if _, _, _, err = store.CompleteMission(owner.ID, squad.ID, domain.CrunchHunter, first.ID, "superseded", attemptProperties(domain.CrunchHunter, first.Challenge)); !errors.Is(err, service.ErrAttemptInvalid) {
 		t.Fatalf("expected superseded attempt rejection, got %v", err)
 	}
-	if _, _, _, err = store.CompleteMission(owner.ID, squad.ID, domain.FlavorScout, "not-a-uuid", "malformed", attemptProperties(domain.FlavorScout, second.Challenge)); !errors.Is(err, service.ErrAttemptInvalid) {
+	if _, _, _, err = store.CompleteMission(owner.ID, squad.ID, domain.CrunchHunter, "not-a-uuid", "malformed", attemptProperties(domain.CrunchHunter, second.Challenge)); !errors.Is(err, service.ErrAttemptInvalid) {
 		t.Fatalf("expected malformed attempt rejection, got %v", err)
 	}
 
-	memberAttempt, err := store.StartMission(member.ID, squad.ID, domain.CrunchCreator)
+	memberAttempt, err := store.StartMission(member.ID, squad.ID, domain.FlavorReferee)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, _, _, err = store.CompleteMission(member.ID, squad.ID, domain.CrunchCreator, second.ID, "cross-assignment", attemptProperties(domain.CrunchCreator, memberAttempt.Challenge)); !errors.Is(err, service.ErrAttemptInvalid) {
+	if _, _, _, err = store.CompleteMission(member.ID, squad.ID, domain.FlavorReferee, second.ID, "cross-assignment", attemptProperties(domain.FlavorReferee, memberAttempt.Challenge)); !errors.Is(err, service.ErrAttemptInvalid) {
 		t.Fatalf("expected cross-assignment attempt rejection, got %v", err)
 	}
 
 	if _, err = store.db.Exec(`UPDATE mission_attempts SET expires_at=now()-interval '1 second' WHERE id=$1`, second.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, _, err = store.CompleteMission(owner.ID, squad.ID, domain.FlavorScout, second.ID, "expired", attemptProperties(domain.FlavorScout, second.Challenge)); !errors.Is(err, service.ErrAttemptInvalid) {
+	if _, _, _, err = store.CompleteMission(owner.ID, squad.ID, domain.CrunchHunter, second.ID, "expired", attemptProperties(domain.CrunchHunter, second.Challenge)); !errors.Is(err, service.ErrAttemptInvalid) {
 		t.Fatalf("expected expired attempt rejection, got %v", err)
 	}
 
-	active, err := store.StartMission(owner.ID, squad.ID, domain.FlavorScout)
+	active, err := store.StartMission(owner.ID, squad.ID, domain.CrunchHunter)
 	if err != nil {
 		t.Fatal(err)
 	}
-	valid := attemptProperties(domain.FlavorScout, active.Challenge)
-	invalid := attemptProperties(domain.FlavorScout, active.Challenge)
-	invalid["discoveryOrder"] = []string{"Sunny Salt", "Sunny Salt", "Sunny Salt"}
-	if _, _, _, err = store.CompleteMission(owner.ID, squad.ID, domain.FlavorScout, active.ID, "invalid-result", invalid); !errors.Is(err, service.ErrMissionFailed) {
+	valid := attemptProperties(domain.CrunchHunter, active.Challenge)
+	invalid := attemptProperties(domain.CrunchHunter, active.Challenge)
+	invalid["foundDifferenceIds"] = []any{"not-a-real-hotspot"}
+	if _, _, _, err = store.CompleteMission(owner.ID, squad.ID, domain.CrunchHunter, active.ID, "invalid-result", invalid); !errors.Is(err, service.ErrMissionFailed) {
 		t.Fatalf("expected challenge result rejection, got %v", err)
 	}
-	if _, _, created, err := store.CompleteMission(owner.ID, squad.ID, domain.FlavorScout, active.ID, "exact-replay", valid); err != nil || !created {
+	if _, _, created, err := store.CompleteMission(owner.ID, squad.ID, domain.CrunchHunter, active.ID, "exact-replay", valid); err != nil || !created {
 		t.Fatalf("expected initial completion, created=%v err=%v", created, err)
 	}
-	if _, _, created, err := store.CompleteMission(owner.ID, squad.ID, domain.FlavorScout, active.ID, "exact-replay", valid); err != nil || created {
+	if _, _, created, err := store.CompleteMission(owner.ID, squad.ID, domain.CrunchHunter, active.ID, "exact-replay", valid); err != nil || created {
 		t.Fatalf("expected exact idempotent replay, created=%v err=%v", created, err)
 	}
-	mutated := attemptProperties(domain.FlavorScout, active.Challenge)
+	mutated := attemptProperties(domain.CrunchHunter, active.Challenge)
 	mutated["completionMs"] = 999.0
-	if _, _, _, err = store.CompleteMission(owner.ID, squad.ID, domain.FlavorScout, active.ID, "exact-replay", mutated); !errors.Is(err, service.ErrConflict) {
+	if _, _, _, err = store.CompleteMission(owner.ID, squad.ID, domain.CrunchHunter, active.ID, "exact-replay", mutated); !errors.Is(err, service.ErrConflict) {
 		t.Fatalf("expected mutated replay conflict, got %v", err)
 	}
-	if _, _, _, err = store.CompleteMission(owner.ID, squad.ID, domain.FlavorScout, active.ID, "different-key", valid); !errors.Is(err, service.ErrConflict) {
+	if _, _, _, err = store.CompleteMission(owner.ID, squad.ID, domain.CrunchHunter, active.ID, "different-key", valid); !errors.Is(err, service.ErrConflict) {
 		t.Fatalf("expected different-key replay conflict, got %v", err)
 	}
-	if _, err = store.StartMission(owner.ID, squad.ID, domain.FlavorScout); !errors.Is(err, service.ErrInvalidState) {
+	if _, err = store.StartMission(owner.ID, squad.ID, domain.CrunchHunter); !errors.Is(err, service.ErrInvalidState) {
 		t.Fatalf("expected completed assignment start conflict, got %v", err)
 	}
 }
 
 func attemptProperties(role domain.Role, challenge map[string]any) map[string]any {
 	switch role {
-	case domain.FlavorScout:
-		return map[string]any{"discoveryOrder": challenge["requiredOrder"], "accuracy": 1.0, "completionMs": 10.0}
-	case domain.CrunchCreator:
-		return map[string]any{"occasion": challenge["requiredOccasion"], "mood": "Bold", "flavor": "Sunny Salt", "background": "Sunburst", "caption": "Crunch", "creativeStyle": "template-card"}
+	case domain.CrunchHunter:
+		return map[string]any{"foundDifferenceIds": postgresHuntIDs(challenge), "completionMs": 10.0, "score": 500.0}
+	case domain.FlavorReferee:
+		var tournament struct {
+			ChampionID string `json:"championId"`
+			Matches    []any  `json:"matches"`
+		}
+		raw, _ := json.Marshal(challenge["tournament"])
+		_ = json.Unmarshal(raw, &tournament)
+		return map[string]any{"championId": tournament.ChampionID, "matchCount": float64(len(tournament.Matches)), "completionMs": 10.0}
 	case domain.SnackDetective:
 		if challenge["variant"] == "location" {
 			return map[string]any{"answers": map[string]any{"q1": "QR Runner", "q2": "Mock Crunch Badge"}}
@@ -469,4 +479,54 @@ func attemptProperties(role domain.Role, challenge map[string]any) map[string]an
 	default:
 		return nil
 	}
+}
+
+func finishPostgresFlavorCup(t *testing.T, store *Game, userID, squadID string, attempt domain.MissionAttempt) domain.MissionAttempt {
+	t.Helper()
+	selections := 0
+	for {
+		var tournament struct {
+			Completed      bool                          `json:"completed"`
+			CurrentMatchID string                        `json:"currentMatchId"`
+			Matches        []struct{ ID, LeftID string } `json:"matches"`
+		}
+		raw, _ := json.Marshal(attempt.Challenge["tournament"])
+		if json.Unmarshal(raw, &tournament) != nil {
+			t.Fatal("invalid tournament")
+		}
+		if tournament.Completed {
+			return attempt
+		}
+		var winner string
+		for _, match := range tournament.Matches {
+			if match.ID == tournament.CurrentMatchID {
+				winner = match.LeftID
+				break
+			}
+		}
+		result, err := store.AdvanceFlavorCup(userID, squadID, attempt.ID, domain.FlavorCupVote{MatchID: tournament.CurrentMatchID, WinnerID: winner, DecisionMs: 10})
+		if err != nil {
+			t.Fatal(err)
+		}
+		attempt = result.Attempt
+		selections++
+		if selections == 1 {
+			resumed, resumeErr := store.StartMission(userID, squadID, domain.FlavorReferee)
+			if resumeErr != nil || resumed.ID != attempt.ID {
+				t.Fatalf("persisted tournament did not resume: %v", resumeErr)
+			}
+			attempt = resumed
+		}
+	}
+}
+
+func postgresHuntIDs(challenge map[string]any) []any {
+	raw, _ := json.Marshal(challenge["differences"])
+	var differences []map[string]any
+	_ = json.Unmarshal(raw, &differences)
+	ids := make([]any, 0, len(differences))
+	for _, difference := range differences {
+		ids = append(ids, difference["id"])
+	}
+	return ids
 }

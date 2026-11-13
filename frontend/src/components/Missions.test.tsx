@@ -1,95 +1,101 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { CrunchCreator, FlavorScout, QRRunner, SnackDetective } from './Missions'
+import { CrunchHunt, FlavorCup, QRRunner, SnackDetective } from './Missions'
 import { MockLineAdapter } from '../lib/liff'
+import type { FlavorCupVoteResult } from '../types'
 
 afterEach(cleanup)
 
-describe('mission interactions', () => {
-  it('completes Flavor Scout after three valid discoveries', async () => {
-    const user = userEvent.setup()
+const huntChallenge = {
+  timerSeconds: 30,
+  maxHints: 1,
+  images: { left: '/a.svg', right: '/b.svg' },
+  scoring: { basePerDifference: 100, speedBonusPerSecond: 1, wrongTapPenalty: 10, hintPenalty: 5 },
+  differences: [{ id: 'one', x: .5, y: .5, radius: .1, hint: 'กลางภาพ' }],
+}
+
+const cupTournament = {
+  bracketSize: 4,
+  flavors: [
+    { id: 'a', name: 'A', description: 'A flavor', image: '/a.svg', color: '#b33' },
+    { id: 'b', name: 'B', description: 'B flavor', image: '/b.svg', color: '#383' },
+    { id: 'c', name: 'C', description: 'C flavor', image: '/c.svg', color: '#338' },
+    { id: 'd', name: 'D', description: 'D flavor', image: '/d.svg', color: '#833' },
+  ],
+  matches: [
+    { id: 'r1m1', round: 1, index: 0, leftId: 'a', rightId: 'b' },
+    { id: 'r1m2', round: 1, index: 1, leftId: 'c', rightId: 'd' },
+    { id: 'r2m1', round: 2, index: 0, leftId: '', rightId: '' },
+  ],
+  currentMatchId: 'r1m1', completed: false, selectionCount: 0,
+}
+
+describe('replacement mission interactions', () => {
+  it('starts Crunch Hunt only after both images load and uses normalized hotspots', async () => {
     const complete = vi.fn().mockResolvedValue(undefined)
-    render(<FlavorScout onComplete={complete} />)
-    await user.click(screen.getByRole('button', { name: /เกลือคลาสสิก/ }))
-    await user.click(screen.getByRole('button', { name: /บาร์บีคิวหอมควัน/ }))
-    await user.click(screen.getByRole('button', { name: /มะนาวซี้ด/ }))
-    await user.click(screen.getByRole('button', { name: /สำเร็จภารกิจ/ }))
-    expect(complete).toHaveBeenCalledWith(expect.objectContaining({ accuracy: 1, discoveryOrder: ['Sunny Salt', 'Smoky BBQ', 'Zesty Lime'] }))
+    const track = vi.fn().mockResolvedValue(undefined)
+    render(<CrunchHunt challenge={huntChallenge} onComplete={complete} track={track} />)
+    const [imageA, imageB] = Array.from(document.querySelectorAll('img'))
+    expect(screen.getByText(/เวลาจะยังไม่เริ่ม/)).toBeInTheDocument()
+    fireEvent.load(imageA)
+    expect(track).not.toHaveBeenCalledWith('crunch_hunt_started', expect.anything())
+    fireEvent.load(imageB)
+    expect(await screen.findByText(/เวลา 30 วินาที/)).toBeInTheDocument()
+    const shelf = screen.getByRole('button', { name: 'ภาพชั้นวาง A' })
+    vi.spyOn(shelf, 'getBoundingClientRect').mockReturnValue({ left: 10, top: 20, width: 200, height: 100, right: 210, bottom: 120, x: 10, y: 20, toJSON: () => ({}) })
+    fireEvent.click(shelf, { clientX: 110, clientY: 70 })
+    await userEvent.click(screen.getByRole('button', { name: /ยืนยันผล Crunch Hunt/ }))
+    expect(complete).toHaveBeenCalledWith(expect.objectContaining({ foundDifferenceIds: ['one'], correctTaps: 1 }))
+    expect(track).toHaveBeenCalledWith('crunch_hunt_tap', expect.objectContaining({ x: .5, y: .5, correct: true }))
   })
 
-  it('follows the server-issued Flavor Scout order', async () => {
-    const user = userEvent.setup()
+  it('penalizes an incorrect Crunch Hunt tap and provides a hint', async () => {
+    render(<CrunchHunt challenge={huntChallenge} onComplete={vi.fn()} />)
+    document.querySelectorAll('img').forEach((image) => fireEvent.load(image))
+    const shelf = screen.getByRole('button', { name: 'ภาพชั้นวาง A' })
+    vi.spyOn(shelf, 'getBoundingClientRect').mockReturnValue({ left: 0, top: 0, width: 100, height: 100, right: 100, bottom: 100, x: 0, y: 0, toJSON: () => ({}) })
+    fireEvent.click(shelf, { clientX: 5, clientY: 5 })
+    expect(await screen.findByText(/ยังไม่ใช่จุดนี้/)).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: /คำใบ้/ }))
+    expect(screen.getByText('กลางภาพ')).toBeInTheDocument()
+  })
+
+  it('saves each Flavor Cup selection through the backend', async () => {
+    const next = { ...cupTournament, matches: [{ ...cupTournament.matches[0], winnerId: 'a', selectedSide: 'left' }, cupTournament.matches[1], { ...cupTournament.matches[2], leftId: 'a' }], currentMatchId: 'r1m2', selectionCount: 1 }
+    const onVote = vi.fn().mockResolvedValue({ attempt: { id: 'attempt', squadId: 'squad', role: 'crunch_creator', challenge: { tournament: next }, status: 'started', startedAt: '', expiresAt: '' }, matchId: 'r1m1', winnerId: 'a', leftFlavor: 'a', rightFlavor: 'b', selectedSide: 'left', round: 1, created: true } as FlavorCupVoteResult)
+    render(<FlavorCup challenge={{ tournament: cupTournament }} onVote={onVote} onComplete={vi.fn()} />)
+    await userEvent.click(screen.getByRole('button', { name: 'เลือก A' }))
+    expect(onVote).toHaveBeenCalledWith('r1m1', 'a', expect.any(Number))
+    expect(await screen.findByRole('button', { name: 'เลือก C' })).toBeInTheDocument()
+  })
+
+  it('shows an immutable Flavor Cup champion card and completes the mission', async () => {
     const complete = vi.fn().mockResolvedValue(undefined)
-    render(<FlavorScout challenge={{ requiredOrder: ['Zesty Lime', 'Sunny Salt', 'Smoky BBQ'] }} onComplete={complete} />)
-    await user.click(screen.getByRole('button', { name: /มะนาวซี้ด/ }))
-    await user.click(screen.getByRole('button', { name: /เกลือคลาสสิก/ }))
-    await user.click(screen.getByRole('button', { name: /บาร์บีคิวหอมควัน/ }))
-    await user.click(screen.getByRole('button', { name: /สำเร็จภารกิจ/ }))
-    expect(complete).toHaveBeenCalledWith(expect.objectContaining({ discoveryOrder: ['Zesty Lime', 'Sunny Salt', 'Smoky BBQ'] }))
+    const finished = { ...cupTournament, matches: cupTournament.matches.map((match) => ({ ...match, leftId: match.leftId || 'a', rightId: match.rightId || 'c', winnerId: 'a' })), currentMatchId: '', championId: 'a', completed: true, selectionCount: 3 }
+    render(<FlavorCup challenge={{ tournament: finished }} onVote={vi.fn()} onComplete={complete} />)
+    expect(screen.getByRole('region', { name: 'My Flavor Champion result card' })).toHaveTextContent('A')
+    await userEvent.click(screen.getByRole('button', { name: /ยืนยันแชมป์และจบภารกิจ/ }))
+    expect(complete).toHaveBeenCalledWith(expect.objectContaining({ championId: 'a', matchCount: 3 }))
   })
+})
 
-  it('submits a mission only once while completion is pending', async () => {
-    const user = userEvent.setup()
-    const complete = vi.fn(() => new Promise<void>(() => undefined))
-    render(<FlavorScout onComplete={complete} />)
-    await user.click(screen.getByRole('button', { name: /เกลือคลาสสิก/ }))
-    await user.click(screen.getByRole('button', { name: /บาร์บีคิวหอมควัน/ }))
-    await user.click(screen.getByRole('button', { name: /มะนาวซี้ด/ }))
-    const submit = screen.getByRole('button', { name: /สำเร็จภารกิจ/ })
-    fireEvent.click(submit)
-    fireEvent.click(submit)
-    expect(complete).toHaveBeenCalledTimes(1)
-    expect(screen.getByRole('button', { name: /กำลังบันทึก/ })).toBeDisabled()
-  })
-
-  it('renders and saves a template-driven Crunch Creator card', async () => {
-    const user = userEvent.setup()
-    const complete = vi.fn().mockResolvedValue(undefined)
-    render(<CrunchCreator onComplete={complete} />)
-    await user.selectOptions(screen.getByLabelText('โอกาส'), 'Game night')
-    await user.clear(screen.getByLabelText('แคปชัน'))
-    await user.type(screen.getByLabelText('แคปชัน'), 'Crunch time!')
-    await user.click(screen.getByRole('button', { name: /บันทึกโมเมนต์/ }))
-    expect(complete).toHaveBeenCalledWith(expect.objectContaining({ occasion: 'Game night', caption: 'Crunch time!', creativeStyle: 'template-card' }))
-  })
-
-  it('locks Crunch Creator to the issued occasion', async () => {
-    const user = userEvent.setup()
-    const complete = vi.fn().mockResolvedValue(undefined)
-    render(<CrunchCreator challenge={{ requiredOccasion: 'Road trip' }} onComplete={complete} />)
-    expect(screen.getByLabelText('โอกาส')).toBeDisabled()
-    await user.click(screen.getByRole('button', { name: /บันทึกโมเมนต์/ }))
-    expect(complete).toHaveBeenCalledWith(expect.objectContaining({ occasion: 'Road trip' }))
-  })
-
+describe('preserved missions', () => {
   it('collects answers and confidence for Snack Detective', async () => {
-    const user = userEvent.setup()
     const complete = vi.fn().mockResolvedValue(undefined)
     render(<SnackDetective onComplete={complete} />)
-    await user.click(screen.getByLabelText('4 บทบาท'))
-    await user.click(screen.getByLabelText('ทำครบทั้ง 4 ภารกิจ'))
-    await user.selectOptions(screen.getByLabelText('มั่นใจแค่ไหน?'), 'somewhat sure')
-    await user.click(screen.getByRole('button', { name: /ส่งคำตอบ/ }))
+    await userEvent.click(screen.getByLabelText('4 บทบาท'))
+    await userEvent.click(screen.getByLabelText('ทำครบทั้ง 4 ภารกิจ'))
+    await userEvent.selectOptions(screen.getByLabelText('มั่นใจแค่ไหน?'), 'somewhat sure')
+    await userEvent.click(screen.getByRole('button', { name: /ส่งคำตอบ/ }))
     expect(complete).toHaveBeenCalledWith(expect.objectContaining({ accuracy: 1, confidence: 'somewhat sure' }))
   })
 
-  it('renders the issued Snack Detective variant', async () => {
-    const user = userEvent.setup()
-    const complete = vi.fn().mockResolvedValue(undefined)
-    render(<SnackDetective challenge={{ variant: 'location' }} onComplete={complete} />)
-    await user.click(screen.getByLabelText('นักวิ่ง QR'))
-    await user.click(screen.getByLabelText('ปลดล็อกสิทธิ์รางวัล'))
-    await user.click(screen.getByRole('button', { name: /ส่งคำตอบ/ }))
-    expect(complete).toHaveBeenCalledWith(expect.objectContaining({ answers: { q1: 'QR Runner', q2: 'Mock Crunch Badge' } }))
-  })
-
   it('validates the local QR fixture before completion', async () => {
-    const user = userEvent.setup()
     const complete = vi.fn().mockResolvedValue(undefined)
     const validateQR = vi.fn().mockResolvedValue({ locationId: 'demo-store' })
     render(<QRRunner line={new MockLineAdapter()} validateQR={validateQR} onComplete={complete} />)
-    await user.click(screen.getByRole('button', { name: /ยืนยันโค้ด/ }))
+    await userEvent.click(screen.getByRole('button', { name: /ยืนยันโค้ด/ }))
     expect(validateQR).toHaveBeenCalledWith('mock:demo-store')
     expect(await screen.findByText(/ยืนยันแล้วที่ demo-store/)).toBeInTheDocument()
     expect(complete).toHaveBeenCalledWith({ locationId: 'demo-store', conversion: true })

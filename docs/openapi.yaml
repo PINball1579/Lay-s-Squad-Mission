@@ -93,6 +93,13 @@ paths:
       tags: [Missions]
       requestBody: {required: true, content: {application/json: {schema: {type: object, required: [attemptId, properties], properties: {attemptId: {type: string, format: uuid}, properties: {type: object, additionalProperties: true}}}}}}
       responses: {'200': {description: Idempotent attempt consumption and squad snapshot}, '400': {$ref: '#/components/responses/Error'}, '401': {$ref: '#/components/responses/Error'}, '403': {$ref: '#/components/responses/Error'}, '409': {$ref: '#/components/responses/Error'}, '422': {$ref: '#/components/responses/Error'}}
+  /squads/{squadId}/missions/flavor-cup/{attemptId}/vote:
+    parameters: [{$ref: '#/components/parameters/SquadId'}, {name: attemptId, in: path, required: true, schema: {type: string, format: uuid}}, {$ref: '#/components/parameters/Csrf'}]
+    post:
+      tags: [Missions]
+      summary: Persist one validated selection in the active Flavor Cup bracket
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [matchId, winnerId, decisionMs], properties: {matchId: {type: string}, winnerId: {type: string}, decisionMs: {type: integer, minimum: 0}}}}}}
+      responses: {'200': {description: Updated durable attempt and bracket}, '409': {$ref: '#/components/responses/Error'}, '422': {$ref: '#/components/responses/Error'}}
   /qr/validate:
     post:
       tags: [Missions]
@@ -151,26 +158,30 @@ components:
         expiresAt: {type: string, format: date-time}
     MissionChallenge:
       oneOf:
-        - {$ref: '#/components/schemas/FlavorScoutChallenge'}
-        - {$ref: '#/components/schemas/CrunchCreatorChallenge'}
+        - {$ref: '#/components/schemas/CrunchHuntChallenge'}
+        - {$ref: '#/components/schemas/FlavorCupChallenge'}
         - {$ref: '#/components/schemas/SnackDetectiveChallenge'}
         - {$ref: '#/components/schemas/QRRunnerChallenge'}
-    FlavorScoutChallenge:
+    CrunchHuntChallenge:
       type: object
-      additionalProperties: false
-      required: [kind, version, requiredOrder]
+      required: [kind, version, images, differences, timerSeconds, maxHints, scoring]
       properties:
-        kind: {type: string, const: flavor_scout}
-        version: {type: integer, const: 1}
-        requiredOrder: {type: array, minItems: 3, maxItems: 3, uniqueItems: true, items: {type: string, enum: [Sunny Salt, Smoky BBQ, Zesty Lime]}}
-    CrunchCreatorChallenge:
+        kind: {type: string, const: crunch_hunt}
+        version: {type: integer, const: 2}
+        timerSeconds: {type: integer, minimum: 1}
+        maxHints: {type: integer, minimum: 0}
+        images: {type: object, required: [left, right], properties: {left: {type: string}, right: {type: string}}}
+        differences: {type: array, minItems: 1, items: {type: object, required: [id, x, y, radius], properties: {id: {type: string}, x: {type: number, minimum: 0, maximum: 1}, y: {type: number, minimum: 0, maximum: 1}, radius: {type: number, minimum: 0, maximum: 1}, hint: {type: string}}}}
+        scoring: {type: object}
+    FlavorCupChallenge:
       type: object
-      additionalProperties: false
-      required: [kind, version, requiredOccasion]
+      required: [kind, version, tournament]
       properties:
-        kind: {type: string, const: crunch_creator}
-        version: {type: integer, const: 1}
-        requiredOccasion: {type: string, enum: [Movie night, Game night, Road trip, Study break]}
+        kind: {type: string, const: flavor_cup}
+        version: {type: integer, const: 2}
+        placementMode: {type: string, enum: [random, alternate]}
+        shareCard: {type: object, properties: {title: {type: string}, accent: {type: string}, message: {type: string, description: "May include the {flavor} token"}}}
+        tournament: {type: object, required: [bracketSize, flavors, matches, currentMatchId, completed, selectionCount], properties: {bracketSize: {type: integer, enum: [4, 8, 16]}, flavors: {type: array, items: {type: object}}, matches: {type: array, items: {type: object}}, currentMatchId: {type: string}, completed: {type: boolean}, selectionCount: {type: integer}}}
     SnackDetectiveChallenge:
       type: object
       additionalProperties: false

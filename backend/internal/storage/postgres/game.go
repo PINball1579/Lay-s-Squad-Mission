@@ -67,7 +67,7 @@ func (g *Game) Close() error { return g.db.Close() }
 
 func (g *Game) Health(ctx context.Context) error {
 	var applied bool
-	if err := g.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE version='0009_preserve_qr_attempt_audit.up.sql')`).Scan(&applied); err != nil {
+	if err := g.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE version='0011_replacement_missions.up.sql')`).Scan(&applied); err != nil {
 		return err
 	}
 	if !applied {
@@ -434,19 +434,93 @@ func (g *Game) StartMission(userID, squadID string, role domain.Role) (domain.Mi
 	if assignmentStatus == "completed" {
 		return domain.MissionAttempt{}, service.ErrInvalidState
 	}
-	challenge := service.NewMissionChallenge(role)
+	if role == domain.FlavorReferee {
+		var existing domain.MissionAttempt
+		var properties []byte
+		err = tx.QueryRowContext(ctx, `SELECT id,properties,started_at,expires_at FROM mission_attempts WHERE assignment_id=$1 AND status='started' AND expires_at>now() ORDER BY started_at DESC LIMIT 1 FOR UPDATE`, assignmentID).Scan(&existing.ID, &properties, &existing.StartedAt, &existing.ExpiresAt)
+		if err == nil {
+			var metadata struct {
+				Challenge map[string]any `json:"challenge"`
+			}
+			if json.Unmarshal(properties, &metadata) != nil {
+				return domain.MissionAttempt{}, service.ErrInvalidState
+			}
+			existing.SquadID, existing.UserID, existing.Role, existing.Challenge, existing.Status = squadID, userID, role, metadata.Challenge, "started"
+			if err = tx.Commit(); err != nil {
+				return domain.MissionAttempt{}, err
+			}
+			return existing, nil
+		}
+		if !errors.Is(err, sql.ErrNoRows) {
+			return domain.MissionAttempt{}, err
+		}
+	}
+	missionConfig := map[string]any{}
+	var configRaw []byte
+	err = tx.QueryRowContext(ctx, `SELECT m.content FROM missions m JOIN roles r ON r.id=m.role_id WHERE r.campaign_id=$1 AND r.code=$2 AND m.active ORDER BY m.version DESC LIMIT 1`, g.campaignID, role).Scan(&configRaw)
+	if err == nil {
+		_ = json.Unmarshal(configRaw, &missionConfig)
+	} else if !errors.Is(err, sql.ErrNoRows) {
+		return domain.MissionAttempt{}, err
+	}
+	challenge := service.NewMissionChallengeWithConfig(role, missionConfig)
 	metadata, _ := json.Marshal(map[string]any{"challenge": challenge})
 	if _, err = tx.ExecContext(ctx, `UPDATE mission_attempts SET status='failed',finished_at=now() WHERE assignment_id=$1 AND status='started'`, assignmentID); err != nil {
 		return domain.MissionAttempt{}, err
 	}
 	attempt := domain.MissionAttempt{SquadID: squadID, UserID: userID, Role: role, Challenge: challenge, Status: "started"}
-	if err = tx.QueryRowContext(ctx, `INSERT INTO mission_attempts(assignment_id,status,properties,expires_at) VALUES($1,'started',$2,now()+interval '15 minutes') RETURNING id,started_at,expires_at`, assignmentID, metadata).Scan(&attempt.ID, &attempt.StartedAt, &attempt.ExpiresAt); err != nil {
+	expiresAt := time.Now().UTC().Add(service.MissionAttemptTTL(role))
+	if err = tx.QueryRowContext(ctx, `INSERT INTO mission_attempts(assignment_id,status,properties,expires_at) VALUES($1,'started',$2,$3) RETURNING id,started_at,expires_at`, assignmentID, metadata, expiresAt).Scan(&attempt.ID, &attempt.StartedAt, &attempt.ExpiresAt); err != nil {
 		return domain.MissionAttempt{}, err
 	}
 	if err = tx.Commit(); err != nil {
 		return domain.MissionAttempt{}, err
 	}
 	return attempt, nil
+}
+
+func (g *Game) AdvanceFlavorCup(userID, squadID, attemptID string, vote domain.FlavorCupVote) (domain.FlavorCupVoteResult, error) {
+	if !validUUID(attemptID) {
+		return domain.FlavorCupVoteResult{}, service.ErrAttemptInvalid
+	}
+	ctx, cancel := g.context()
+	defer cancel()
+	tx, err := g.db.BeginTx(ctx, nil)
+	if err != nil {
+		return domain.FlavorCupVoteResult{}, err
+	}
+	defer tx.Rollback()
+	var attempt domain.MissionAttempt
+	var properties []byte
+	err = tx.QueryRowContext(ctx, `SELECT ma.id,ma.properties,ma.started_at,ma.expires_at FROM mission_attempts ma JOIN role_assignments ra ON ra.id=ma.assignment_id JOIN roles r ON r.id=ra.role_id JOIN squad_members sm ON sm.id=ra.member_id JOIN users u ON u.id=sm.user_id JOIN consent_records c ON c.id=(SELECT id FROM consent_records WHERE user_id=u.id AND campaign_id=ra.campaign_id ORDER BY recorded_at DESC LIMIT 1) WHERE ma.id=$1 AND ra.squad_id=$2 AND ra.campaign_id=$3 AND r.code=$4 AND u.pseudonymous_id=$5 AND sm.state='active' AND c.required_accepted AND ma.status='started' AND ma.expires_at>now() FOR UPDATE OF ma`, attemptID, squadID, g.campaignID, domain.FlavorReferee, userID).Scan(&attempt.ID, &properties, &attempt.StartedAt, &attempt.ExpiresAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return domain.FlavorCupVoteResult{}, service.ErrAttemptInvalid
+	}
+	if err != nil {
+		return domain.FlavorCupVoteResult{}, err
+	}
+	var metadata struct {
+		Challenge map[string]any `json:"challenge"`
+	}
+	if json.Unmarshal(properties, &metadata) != nil {
+		return domain.FlavorCupVoteResult{}, service.ErrInvalidState
+	}
+	updated, result, err := service.ApplyFlavorCupVote(metadata.Challenge, vote)
+	if err != nil {
+		return domain.FlavorCupVoteResult{}, err
+	}
+	challengeRaw, _ := json.Marshal(updated)
+	if result.Created {
+		if err = tx.QueryRowContext(ctx, `UPDATE mission_attempts SET properties=jsonb_set(properties,'{challenge}',$2::jsonb,true),expires_at=GREATEST(expires_at,now()+interval '7 days') WHERE id=$1 RETURNING expires_at`, attemptID, challengeRaw).Scan(&attempt.ExpiresAt); err != nil {
+			return domain.FlavorCupVoteResult{}, err
+		}
+	}
+	if err = tx.Commit(); err != nil {
+		return domain.FlavorCupVoteResult{}, err
+	}
+	attempt.SquadID, attempt.UserID, attempt.Role, attempt.Challenge, attempt.Status = squadID, userID, domain.FlavorReferee, updated, "started"
+	result.Attempt = attempt
+	return result, nil
 }
 
 func (g *Game) VerifyQR(userID, sessionID, attemptID string, proof domain.QRProof) (domain.QRProof, error) {
@@ -853,7 +927,53 @@ func (g *Game) Dashboard() domain.Dashboard {
 	}
 	rows.Close()
 	g.must(rows.Err())
+	flavors := map[string]*domain.FlavorPerformance{}
+	rows, err = g.db.QueryContext(ctx, `SELECT properties FROM analytics_events WHERE campaign_id=$1 AND name='flavor_cup_matchup_selected'`, g.campaignID)
+	g.must(err)
+	for rows.Next() {
+		var raw []byte
+		g.must(rows.Scan(&raw))
+		var properties map[string]any
+		_ = json.Unmarshal(raw, &properties)
+		for _, key := range []string{"leftFlavor", "rightFlavor"} {
+			if id, _ := properties[key].(string); id != "" {
+				postgresFlavorMetric(flavors, id).ExposureCount++
+			}
+		}
+		if id, _ := properties["winnerFlavor"].(string); id != "" {
+			postgresFlavorMetric(flavors, id).WinCount++
+		}
+	}
+	rows.Close()
+	g.must(rows.Err())
+	rows, err = g.db.QueryContext(ctx, `SELECT mc.properties FROM mission_completions mc JOIN role_assignments ra ON ra.id=mc.assignment_id JOIN roles r ON r.id=ra.role_id WHERE ra.campaign_id=$1 AND r.code=$2`, g.campaignID, domain.FlavorReferee)
+	g.must(err)
+	for rows.Next() {
+		var raw []byte
+		g.must(rows.Scan(&raw))
+		var properties map[string]any
+		_ = json.Unmarshal(raw, &properties)
+		if id, _ := properties["championId"].(string); id != "" {
+			postgresFlavorMetric(flavors, id).ChampionCount++
+		}
+	}
+	rows.Close()
+	g.must(rows.Err())
+	for _, entry := range flavors {
+		if entry.ExposureCount > 0 {
+			entry.WinRate = float64(entry.WinCount) / float64(entry.ExposureCount)
+		}
+		d.FlavorPerformance = append(d.FlavorPerformance, *entry)
+	}
+	sort.Slice(d.FlavorPerformance, func(i, j int) bool { return d.FlavorPerformance[i].FlavorID < d.FlavorPerformance[j].FlavorID })
 	return d
+}
+
+func postgresFlavorMetric(values map[string]*domain.FlavorPerformance, id string) *domain.FlavorPerformance {
+	if values[id] == nil {
+		values[id] = &domain.FlavorPerformance{FlavorID: id}
+	}
+	return values[id]
 }
 
 func (g *Game) Events() []domain.AnalyticsEvent {

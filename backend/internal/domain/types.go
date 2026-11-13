@@ -5,13 +5,15 @@ import "time"
 type Role string
 
 const (
-	FlavorScout    Role = "flavor_scout"
-	CrunchCreator  Role = "crunch_creator"
+	// The stored role codes stay stable so historical completions and analytics
+	// remain queryable after the mission replacement.
+	CrunchHunter   Role = "flavor_scout"
+	FlavorReferee  Role = "crunch_creator"
 	SnackDetective Role = "snack_detective"
 	QRRunner       Role = "qr_runner"
 )
 
-var Roles = []Role{FlavorScout, CrunchCreator, SnackDetective, QRRunner}
+var Roles = []Role{CrunchHunter, FlavorReferee, SnackDetective, QRRunner}
 
 func (r Role) Valid() bool {
 	for _, candidate := range Roles {
@@ -91,6 +93,24 @@ type MissionAttempt struct {
 	ExpiresAt time.Time      `json:"expiresAt"`
 }
 
+type FlavorCupVote struct {
+	MatchID    string `json:"matchId"`
+	WinnerID   string `json:"winnerId"`
+	DecisionMs int64  `json:"decisionMs"`
+}
+
+type FlavorCupVoteResult struct {
+	Attempt      MissionAttempt `json:"attempt"`
+	MatchID      string         `json:"matchId"`
+	WinnerID     string         `json:"winnerId"`
+	LeftFlavor   string         `json:"leftFlavor"`
+	RightFlavor  string         `json:"rightFlavor"`
+	SelectedSide string         `json:"selectedSide"`
+	Round        int            `json:"round"`
+	ChampionID   string         `json:"championId,omitempty"`
+	Created      bool           `json:"created"`
+}
+
 type QRProof struct {
 	AttemptID  string `json:"-"`
 	UserID     string `json:"-"`
@@ -113,11 +133,20 @@ type AnalyticsEvent struct {
 }
 
 type Dashboard struct {
-	UniquePlayers     int            `json:"uniquePlayers"`
-	SquadsCreated     int            `json:"squadsCreated"`
-	CompletedSquads   int            `json:"completedSquads"`
-	RewardsUnlocked   int            `json:"rewardsUnlocked"`
-	RewardsRedeemed   int            `json:"rewardsRedeemed"`
-	EventsByName      map[string]int `json:"eventsByName"`
-	CompletionsByRole map[Role]int   `json:"completionsByRole"`
+	UniquePlayers     int                 `json:"uniquePlayers"`
+	SquadsCreated     int                 `json:"squadsCreated"`
+	CompletedSquads   int                 `json:"completedSquads"`
+	RewardsUnlocked   int                 `json:"rewardsUnlocked"`
+	RewardsRedeemed   int                 `json:"rewardsRedeemed"`
+	EventsByName      map[string]int      `json:"eventsByName"`
+	CompletionsByRole map[Role]int        `json:"completionsByRole"`
+	FlavorPerformance []FlavorPerformance `json:"flavorPerformance"`
+}
+
+type FlavorPerformance struct {
+	FlavorID      string  `json:"flavorId"`
+	ExposureCount int     `json:"exposureCount"`
+	WinCount      int     `json:"winCount"`
+	ChampionCount int     `json:"championCount"`
+	WinRate       float64 `json:"winRate"`
 }

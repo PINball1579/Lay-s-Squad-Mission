@@ -1,6 +1,7 @@
 package service
 
 import (
+	"encoding/json"
 	"errors"
 	"sync"
 	"testing"
@@ -82,7 +83,7 @@ func TestConcurrentRoleClaimHasOneWinner(t *testing.T) {
 		wg.Add(1)
 		go func(userID string) {
 			defer wg.Done()
-			_, err := game.ClaimRole(userID, squad.ID, domain.FlavorScout)
+			_, err := game.ClaimRole(userID, squad.ID, domain.CrunchHunter)
 			results <- err
 		}(user.ID)
 	}
@@ -117,6 +118,9 @@ func TestMissionCompletionIsIdempotentAndUnlocksOnce(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
+		if role == domain.FlavorReferee {
+			attempt = finishMemoryFlavorCup(t, game, users[i].ID, squad.ID, attempt)
+		}
 		view, completion, _, err := game.CompleteMission(users[i].ID, squad.ID, role, attempt.ID, "key-"+string(role), validProperties(role, attempt.Challenge))
 		if err != nil {
 			t.Fatal(err)
@@ -147,19 +151,74 @@ func TestMissionCompletionIsIdempotentAndUnlocksOnce(t *testing.T) {
 func TestMissionAttemptIsRequiredAndExpires(t *testing.T) {
 	game := newTestGame()
 	squad, users, _ := addFour(t, game)
-	if _, err := game.ClaimRole(users[0].ID, squad.ID, domain.FlavorScout); err != nil {
+	if _, err := game.ClaimRole(users[0].ID, squad.ID, domain.CrunchHunter); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, _, err := game.CompleteMission(users[0].ID, squad.ID, domain.FlavorScout, "", "missing-attempt", validProperties(domain.FlavorScout)); !errors.Is(err, ErrAttemptInvalid) {
+	if _, _, _, err := game.CompleteMission(users[0].ID, squad.ID, domain.CrunchHunter, "", "missing-attempt", validProperties(domain.CrunchHunter)); !errors.Is(err, ErrAttemptInvalid) {
 		t.Fatalf("completion without an attempt was accepted: %v", err)
 	}
-	attempt, err := game.StartMission(users[0].ID, squad.ID, domain.FlavorScout)
+	attempt, err := game.StartMission(users[0].ID, squad.ID, domain.CrunchHunter)
 	if err != nil {
 		t.Fatal(err)
 	}
 	game.now = func() time.Time { return attempt.ExpiresAt.Add(time.Second) }
-	if _, _, _, err := game.CompleteMission(users[0].ID, squad.ID, domain.FlavorScout, attempt.ID, "expired-attempt", validProperties(domain.FlavorScout, attempt.Challenge)); !errors.Is(err, ErrAttemptInvalid) {
+	if _, _, _, err := game.CompleteMission(users[0].ID, squad.ID, domain.CrunchHunter, attempt.ID, "expired-attempt", validProperties(domain.CrunchHunter, attempt.Challenge)); !errors.Is(err, ErrAttemptInvalid) {
 		t.Fatalf("expired attempt was accepted: %v", err)
+	}
+}
+
+func TestFlavorCupPersistsAcrossStartAndPreventsDuplicateVotes(t *testing.T) {
+	game := newTestGame()
+	squad, users, _ := addFour(t, game)
+	if _, err := game.ClaimRole(users[0].ID, squad.ID, domain.FlavorReferee); err != nil {
+		t.Fatal(err)
+	}
+	attempt, err := game.StartMission(users[0].ID, squad.ID, domain.FlavorReferee)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var tournament flavorCupTournament
+	raw, _ := json.Marshal(attempt.Challenge["tournament"])
+	_ = json.Unmarshal(raw, &tournament)
+	current := tournament.Matches[0]
+	if _, err = game.AdvanceFlavorCup(users[0].ID, squad.ID, attempt.ID, domain.FlavorCupVote{MatchID: current.ID, WinnerID: "not-exposed", DecisionMs: 1}); !errors.Is(err, ErrInvalidState) {
+		t.Fatalf("invalid winner accepted: %v", err)
+	}
+	result, err := game.AdvanceFlavorCup(users[0].ID, squad.ID, attempt.ID, domain.FlavorCupVote{MatchID: current.ID, WinnerID: current.LeftID, DecisionMs: 25})
+	if err != nil || !result.Created {
+		t.Fatalf("vote was not stored: %v", err)
+	}
+	duplicate, err := game.AdvanceFlavorCup(users[0].ID, squad.ID, attempt.ID, domain.FlavorCupVote{MatchID: current.ID, WinnerID: current.LeftID, DecisionMs: 25})
+	if err != nil || duplicate.Created {
+		t.Fatalf("duplicate vote was not idempotent: %v", err)
+	}
+	resumed, err := game.StartMission(users[0].ID, squad.ID, domain.FlavorReferee)
+	if err != nil || resumed.ID != attempt.ID {
+		t.Fatalf("tournament did not resume: %v", err)
+	}
+	raw, _ = json.Marshal(resumed.Challenge["tournament"])
+	_ = json.Unmarshal(raw, &tournament)
+	if tournament.SelectionCount != 1 {
+		t.Fatalf("expected one persisted selection, got %d", tournament.SelectionCount)
+	}
+}
+
+func TestFlavorCupConfigurationSupportsSeededFourFlavorBracket(t *testing.T) {
+	challenge := NewMissionChallengeWithConfig(domain.FlavorReferee, map[string]any{
+		"bracketSize":   4,
+		"seedOrder":     []string{"classic", "bbq", "nori", "sour-cream"},
+		"placementMode": "alternate",
+	})
+	var tournament flavorCupTournament
+	raw, _ := json.Marshal(challenge["tournament"])
+	if err := json.Unmarshal(raw, &tournament); err != nil {
+		t.Fatal(err)
+	}
+	if tournament.BracketSize != 4 || len(tournament.Matches) != 3 {
+		t.Fatalf("unexpected bracket: size=%d matches=%d", tournament.BracketSize, len(tournament.Matches))
+	}
+	if tournament.Matches[0].LeftID != "classic" || tournament.Matches[0].RightID != "bbq" || tournament.Matches[1].LeftID != "sour-cream" || tournament.Matches[1].RightID != "nori" {
+		t.Fatalf("seed order and alternating placement were not applied: %+v", tournament.Matches[:2])
 	}
 }
 
@@ -169,12 +228,13 @@ func validProperties(role domain.Role, challenges ...map[string]any) map[string]
 		challenge = challenges[0]
 	}
 	switch role {
-	case domain.FlavorScout:
-		order, _ := challenge["requiredOrder"].([]any)
-		return map[string]any{"discoveryOrder": order, "accuracy": 1.0, "completionMs": 1000.0}
-	case domain.CrunchCreator:
-		occasion, _ := challenge["requiredOccasion"].(string)
-		return map[string]any{"occasion": occasion, "mood": "Bold", "flavor": "Sunny Salt", "background": "Sunburst", "caption": "Crunch", "creativeStyle": "template-card"}
+	case domain.CrunchHunter:
+		return map[string]any{"foundDifferenceIds": crunchHuntIDs(challenge), "completionMs": 1000.0, "score": 500.0}
+	case domain.FlavorReferee:
+		var tournament flavorCupTournament
+		raw, _ := json.Marshal(challenge["tournament"])
+		_ = json.Unmarshal(raw, &tournament)
+		return map[string]any{"championId": tournament.ChampionID, "matchCount": float64(len(tournament.Matches)), "completionMs": 1000.0}
 	case domain.SnackDetective:
 		if challenge["variant"] == "location" {
 			return map[string]any{"answers": map[string]any{"q1": "QR Runner", "q2": "Mock Crunch Badge"}, "confidence": "sure"}
@@ -185,6 +245,43 @@ func validProperties(role domain.Role, challenges ...map[string]any) map[string]
 	default:
 		return nil
 	}
+}
+
+func finishMemoryFlavorCup(t *testing.T, game *Game, userID, squadID string, attempt domain.MissionAttempt) domain.MissionAttempt {
+	t.Helper()
+	for {
+		var tournament flavorCupTournament
+		raw, _ := json.Marshal(attempt.Challenge["tournament"])
+		if json.Unmarshal(raw, &tournament) != nil {
+			t.Fatal("invalid tournament")
+		}
+		if tournament.Completed {
+			return attempt
+		}
+		var current flavorCupMatch
+		for _, match := range tournament.Matches {
+			if match.ID == tournament.CurrentMatchID {
+				current = match
+				break
+			}
+		}
+		result, err := game.AdvanceFlavorCup(userID, squadID, attempt.ID, domain.FlavorCupVote{MatchID: current.ID, WinnerID: current.LeftID, DecisionMs: 10})
+		if err != nil {
+			t.Fatal(err)
+		}
+		attempt = result.Attempt
+	}
+}
+
+func crunchHuntIDs(challenge map[string]any) []any {
+	raw, _ := json.Marshal(challenge["differences"])
+	var differences []map[string]any
+	_ = json.Unmarshal(raw, &differences)
+	ids := make([]any, 0, len(differences))
+	for _, difference := range differences {
+		ids = append(ids, difference["id"])
+	}
+	return ids
 }
 
 func TestAnalyticsConsentDoesNotBlockPlay(t *testing.T) {
@@ -228,6 +325,9 @@ func TestMissionSuccessCriteriaAndConcurrentRewardRedemption(t *testing.T) {
 			if _, _, _, err := game.CompleteMission(users[i].ID, squad.ID, role, attempt.ID, "bad", map[string]any{"accuracy": 1}); !errors.Is(err, ErrMissionFailed) {
 				t.Fatalf("invalid mission accepted: %v", err)
 			}
+		}
+		if role == domain.FlavorReferee {
+			attempt = finishMemoryFlavorCup(t, game, users[i].ID, squad.ID, attempt)
 		}
 		if _, _, _, err := game.CompleteMission(users[i].ID, squad.ID, role, attempt.ID, "complete-"+string(role), validProperties(role, attempt.Challenge)); err != nil {
 			t.Fatal(err)

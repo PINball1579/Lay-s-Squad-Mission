@@ -47,8 +47,8 @@ test('four-player journey, race handling, consent, QR, reward, and dashboard', a
   const maliResponse = mali.waitForResponse((response) => response.url().includes('/roles/flavor_scout'))
   const nokResponse = nok.waitForResponse((response) => response.url().includes('/roles/flavor_scout'))
   await Promise.all([
-    roleCard(mali, 'นักล่ารสชาติ').getByRole('button', { name: /ล็อกภารกิจนี้/i }).click(),
-    roleCard(nok, 'นักล่ารสชาติ').getByRole('button', { name: /ล็อกภารกิจนี้/i }).click(),
+    roleCard(mali, 'Crunch Hunter').getByRole('button', { name: /ล็อกภารกิจนี้/i }).click(),
+    roleCard(nok, 'Crunch Hunter').getByRole('button', { name: /ล็อกภารกิจนี้/i }).click(),
   ])
   const maliStatus = (await maliResponse).status()
   const nokStatus = (await nokResponse).status()
@@ -58,19 +58,35 @@ test('four-player journey, race handling, consent, QR, reward, and dashboard', a
   const creatorPage = flavorPage === mali ? nok : mali
   await creatorPage.reload()
   await expect(creatorPage.getByRole('region', { name: 'ภารกิจของทีม' })).toBeVisible()
-  await claim(creatorPage, 'ครีเอเตอร์สายครันช์')
+  await claim(creatorPage, 'Flavor Referee')
   await claim(beam, 'นักสืบสายสแน็ก')
   await claim(ploy, 'นักวิ่ง QR')
 
-  await roleCard(flavorPage, 'นักล่ารสชาติ').getByRole('button', { name: /เริ่มภารกิจของฉัน/i }).click()
-  const requiredItems = flavorPage.getByRole('list', { name: 'ลำดับรสชาติที่ต้องหา' }).getByRole('listitem')
-  await expect(requiredItems).toHaveCount(3)
-  const requiredFlavors = await requiredItems.allTextContents()
-  for (const flavor of requiredFlavors) await flavorPage.getByRole('button', { name: new RegExp(flavor, 'i') }).click()
-  await flavorPage.getByRole('button', { name: /สำเร็จภารกิจ/i }).click()
+  await roleCard(flavorPage, 'Crunch Hunter').getByRole('button', { name: /เริ่มภารกิจของฉัน/i }).click()
+  await expect(flavorPage.getByRole('heading', { name: /Crunch Hunt/ })).toBeVisible()
+  const huntImage = flavorPage.getByRole('button', { name: 'ภาพชั้นวาง A' })
+  await expect(flavorPage.getByText(/เวลา 90 วินาที/)).toBeVisible()
+  const huntBox = await huntImage.boundingBox()
+  if (!huntBox) throw new Error('Crunch Hunt image did not render')
+  let foundCount = 0
+  for (const [x, y] of [[.50,.13],[.19,.43],[.76,.43],[.35,.72],[.82,.73]]) {
+    foundCount += 1
+    await huntImage.click({ position: { x: huntBox.width * x, y: huntBox.height * y } })
+    await expect(flavorPage.getByText(`พบ ${foundCount}/5`)).toBeVisible()
+  }
+  await flavorPage.getByRole('button', { name: /ยืนยันผล Crunch Hunt/i }).click()
 
-  await roleCard(creatorPage, 'ครีเอเตอร์สายครันช์').getByRole('button', { name: /เริ่มภารกิจของฉัน/i }).click()
-  await creatorPage.getByRole('button', { name: /บันทึกโมเมนต์/i }).click()
+  await roleCard(creatorPage, 'Flavor Referee').getByRole('button', { name: /เริ่มภารกิจของฉัน/i }).click()
+  await expect(creatorPage.getByRole('heading', { name: /Flavor Cup/ })).toBeVisible()
+  await creatorPage.getByRole('region', { name: 'คู่แข่งขันปัจจุบัน' }).getByRole('button').first().click()
+  await creatorPage.reload()
+  await expect(creatorPage.getByRole('region', { name: 'ภารกิจของทีม' })).toBeVisible()
+  await roleCard(creatorPage, 'Flavor Referee').getByRole('button', { name: /เริ่มภารกิจของฉัน/i }).click()
+  for (let selection = 1; selection < 7; selection++) {
+    await creatorPage.getByRole('region', { name: 'คู่แข่งขันปัจจุบัน' }).getByRole('button').first().click()
+  }
+  await expect(creatorPage.getByRole('region', { name: 'My Flavor Champion result card' })).toBeVisible()
+  await creatorPage.getByRole('button', { name: /ยืนยันแชมป์และจบภารกิจ/i }).click()
 
   await roleCard(beam, 'นักสืบสายสแน็ก').getByRole('button', { name: /เริ่มภารกิจของฉัน/i }).click()
   await expect(beam.getByRole('heading', { name: 'แกะเบาะเงื่อนงำให้ได้' })).toBeVisible()

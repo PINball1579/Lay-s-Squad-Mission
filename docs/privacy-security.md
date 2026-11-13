@@ -4,7 +4,7 @@
 
 The service creates an internal pseudonymous identity from the verified LINE subject. Raw LINE ID/access tokens, full profile payloads, QR signing keys, reward secrets, and administrator credentials must never enter analytics. Required processing covers identity, squad state, fraud prevention, and reward integrity. Optional behavioral analytics has a separate consent flag and declining it does not block game play.
 
-Flavor, occasion, mood, and creative choices are observed campaign interactions. They do not establish purchase intent and must not be used to infer health, ethnicity, religion, age, or other sensitive characteristics.
+Flavor Cup selections are observed campaign interactions, not confirmed purchase intent. Crunch Hunt stores normalized tap coordinates for a tap heatmap; this is not eye tracking. Neither dataset may be used to infer health, ethnicity, religion, age, or other sensitive characteristics.
 
 Retention periods, subject access/deletion procedures, campaign controller identity, international transfer language, and legal basis require campaign-owner and counsel approval before real use.
 

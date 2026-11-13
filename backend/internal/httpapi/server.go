@@ -42,6 +42,7 @@ type GameStore interface {
 	JoinSquad(string, string) (domain.Squad, error)
 	ClaimRole(string, string, domain.Role) (domain.Squad, error)
 	StartMission(string, string, domain.Role) (domain.MissionAttempt, error)
+	AdvanceFlavorCup(string, string, string, domain.FlavorCupVote) (domain.FlavorCupVoteResult, error)
 	VerifyQR(string, string, string, domain.QRProof) (domain.QRProof, error)
 	QRProof(string, string, string) (domain.QRProof, error)
 	CompleteMission(string, string, domain.Role, string, string, map[string]any) (domain.Squad, domain.Completion, bool, error)
@@ -166,6 +167,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /api/v1/squads/{squadID}/roles/{role}", s.claimRole)
 	s.mux.HandleFunc("GET /api/v1/missions/{role}", s.mission)
 	s.mux.HandleFunc("POST /api/v1/squads/{squadID}/missions/{role}/start", s.startMission)
+	s.mux.HandleFunc("POST /api/v1/squads/{squadID}/missions/flavor-cup/{attemptID}/vote", s.flavorCupVote)
 	s.mux.HandleFunc("POST /api/v1/squads/{squadID}/missions/{role}/complete", s.completeMission)
 	s.mux.HandleFunc("POST /api/v1/qr/validate", s.validateQR)
 	s.mux.HandleFunc("GET /api/v1/squads/{squadID}/reward", s.getReward)
@@ -192,10 +194,10 @@ func (s *Server) campaign(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"id": "lays-crunch-squad", "name": "Lay's Crunch Squad",
 		"tagline": "รวมแก๊ง 4 คน พิชิต 4 ภารกิจ แล้วเปิด Crunch Vault", "squadSize": 4,
-		"roles":     domain.Roles,
-		"flavors":   []string{"Sunny Salt", "Smoky BBQ", "Zesty Lime", "Spicy Spark"},
-		"occasions": []string{"Movie night", "Game night", "Road trip", "Study break"},
-		"termsUrl":  "/docs/placeholder-terms", "privacyUrl": "/docs/placeholder-privacy",
+		"roles":    domain.Roles,
+		"flavors":  []string{"Classic", "Bar-B-Q", "Nori Seaweed", "Sour Cream & Onion", "Hot & Spicy", "Cheese", "Truffle", "Zesty Lime"},
+		"missions": []string{"Crunch Hunt", "Flavor Cup", "Snack Detective", "QR Runner"},
+		"termsUrl": "/docs/placeholder-terms", "privacyUrl": "/docs/placeholder-privacy",
 		"brand": map[string]string{"primary": "#ffd928", "accent": "#e44532", "assetStatus": "campaign-ready"},
 	})
 }
@@ -456,8 +458,8 @@ func (s *Server) mission(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	content := map[domain.Role]map[string]any{
-		domain.FlavorScout:    {"title": "ล่ารสชาติให้ถูกลำดับ", "kind": "shelf", "clues": []string{"ค้นหารสคลาสสิก", "ตามหารสบาร์บีคิว", "เลือกรสมะนาวซี้ด"}},
-		domain.CrunchCreator:  {"title": "สร้างโมเมนต์เลย์ของคุณ", "kind": "card", "backgrounds": []string{"Sunburst", "Warm waves", "Night pop"}, "accessories": []string{"Spark", "Chip burst", "Confetti"}},
+		domain.CrunchHunter:   {"title": "Crunch Hunt — Spot the Shelf", "kind": "crunch_hunt", "configSource": "mission challenge"},
+		domain.FlavorReferee:  {"title": "Flavor Cup — Crown Your Crunch", "kind": "flavor_cup", "bracketSizes": []int{4, 8, 16}, "configSource": "mission challenge"},
 		domain.SnackDetective: {"title": "แกะเบาะแสสายสแน็ก", "kind": "quiz", "contentSource": "issued attempt challenge", "variants": []string{"squad", "location"}},
 		domain.QRRunner:       {"title": "สแกนจุดกิจกรรม", "kind": "qr", "manualEntry": true},
 	}
@@ -465,6 +467,26 @@ func (s *Server) mission(w http.ResponseWriter, r *http.Request) {
 		content[domain.QRRunner]["mockCode"] = "mock:demo-store"
 	}
 	writeJSON(w, http.StatusOK, content[role])
+}
+
+func (s *Server) flavorCupVote(w http.ResponseWriter, r *http.Request) {
+	sess, _, ok := s.requireSession(w, r, true)
+	if !ok {
+		return
+	}
+	var vote domain.FlavorCupVote
+	if !decodeBody(w, r, &vote) {
+		return
+	}
+	result, err := s.game.AdvanceFlavorCup(sess.UserID, r.PathValue("squadID"), r.PathValue("attemptID"), vote)
+	if err != nil {
+		writeServiceError(w, err)
+		return
+	}
+	if result.Created {
+		s.game.RecordEvent(sess.UserID, domain.AnalyticsEvent{Name: "flavor_cup_matchup_selected", SessionID: sess.ID, SquadID: r.PathValue("squadID"), Role: domain.FlavorReferee, Properties: map[string]any{"matchId": result.MatchID, "leftFlavor": result.LeftFlavor, "rightFlavor": result.RightFlavor, "winnerFlavor": result.WinnerID, "selectedSide": result.SelectedSide, "round": result.Round, "decisionMs": vote.DecisionMs}})
+	}
+	writeJSON(w, http.StatusOK, result)
 }
 
 func (s *Server) startMission(w http.ResponseWriter, r *http.Request) {
@@ -633,9 +655,10 @@ func (s *Server) adminEventsCSV(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
 	w.Header().Set("Content-Disposition", "attachment; filename=analytics-events.csv")
 	writer := csv.NewWriter(w)
-	_ = writer.Write([]string{"event_id", "name", "server_timestamp", "user_id", "squad_id", "role", "session_id", "consent_state"})
+	_ = writer.Write([]string{"event_id", "name", "server_timestamp", "user_id", "squad_id", "role", "session_id", "consent_state", "properties"})
 	for _, event := range s.game.Events() {
-		_ = writer.Write([]string{safeCSV(event.ID), safeCSV(event.Name), event.OccurredAt.Format(time.RFC3339), safeCSV(event.UserID), safeCSV(event.SquadID), safeCSV(string(event.Role)), safeCSV(event.SessionID), safeCSV(event.Consent)})
+		properties, _ := json.Marshal(event.Properties)
+		_ = writer.Write([]string{safeCSV(event.ID), safeCSV(event.Name), event.OccurredAt.Format(time.RFC3339), safeCSV(event.UserID), safeCSV(event.SquadID), safeCSV(string(event.Role)), safeCSV(event.SessionID), safeCSV(event.Consent), safeCSV(string(properties))})
 	}
 	writer.Flush()
 }
@@ -875,22 +898,38 @@ func validEventName(name string) bool {
 		"mission_failed": true, "mission_completed": true, "squad_completed": true,
 		"reward_unlocked": true, "reward_viewed": true, "reward_redeemed": true,
 		"share_initiated": true, "share_completed": true, "survey_completed": true,
+		"crunch_hunt_started": true, "crunch_hunt_tap": true, "crunch_hunt_difference_found": true,
+		"crunch_hunt_hint_used": true, "crunch_hunt_restarted": true, "crunch_hunt_timed_out": true, "crunch_hunt_completed": true,
+		"flavor_cup_started": true, "flavor_cup_resumed": true, "flavor_cup_matchup_selected": true,
+		"flavor_cup_completed": true, "flavor_cup_result_shared": true,
 	}
 	return allowed[name]
 }
 
 func analyticsProperties(name string, properties map[string]any) map[string]any {
 	allowedByEvent := map[string]map[string]bool{
-		"liff_opened":            {"source": true, "deviceCategory": true},
-		"invitation_opened":      {"source": true, "utmSource": true, "utmMedium": true, "utmCampaign": true},
-		"squad_join_failed":      {"reason": true},
-		"role_viewed":            {"contentVersion": true},
-		"mission_started":        {"contentVersion": true},
-		"mission_step_completed": {"step": true, "questionId": true},
-		"mission_failed":         {"reason": true, "questionId": true},
-		"share_initiated":        {"shareSurface": true},
-		"share_completed":        {"shareSurface": true, "result": true},
-		"survey_completed":       {"rating": true},
+		"liff_opened":                  {"source": true, "deviceCategory": true},
+		"invitation_opened":            {"source": true, "utmSource": true, "utmMedium": true, "utmCampaign": true},
+		"squad_join_failed":            {"reason": true},
+		"role_viewed":                  {"contentVersion": true},
+		"mission_started":              {"contentVersion": true},
+		"mission_step_completed":       {"step": true, "questionId": true},
+		"mission_failed":               {"reason": true, "questionId": true},
+		"share_initiated":              {"shareSurface": true},
+		"share_completed":              {"shareSurface": true, "result": true},
+		"survey_completed":             {"rating": true},
+		"crunch_hunt_started":          {"timerSeconds": true, "differenceCount": true},
+		"crunch_hunt_tap":              {"x": true, "y": true, "correct": true, "differenceId": true, "elapsedMs": true},
+		"crunch_hunt_difference_found": {"differenceId": true, "findMs": true},
+		"crunch_hunt_hint_used":        {"differenceId": true, "hintsUsed": true},
+		"crunch_hunt_restarted":        {"foundCount": true},
+		"crunch_hunt_timed_out":        {"foundCount": true, "wrongTaps": true, "hintsUsed": true, "missedDifferenceIds": true},
+		"crunch_hunt_completed":        {"completionMs": true, "score": true, "correctTaps": true, "wrongTaps": true, "hintsUsed": true, "speedBonus": true, "missedDifferenceIds": true},
+		"flavor_cup_started":           {"bracketSize": true},
+		"flavor_cup_resumed":           {"selections": true, "currentRound": true},
+		"flavor_cup_matchup_selected":  {"matchId": true, "leftFlavor": true, "rightFlavor": true, "winnerFlavor": true, "round": true, "decisionMs": true, "selectedSide": true},
+		"flavor_cup_completed":         {"championId": true, "matchCount": true, "completionMs": true},
+		"flavor_cup_result_shared":     {"championId": true, "shareSurface": true, "result": true},
 	}
 	allowed := allowedByEvent[name]
 	result := map[string]any{}
@@ -907,8 +946,8 @@ func analyticsProperties(name string, properties map[string]any) map[string]any 
 
 func analyticsMissionProperties(role domain.Role, properties map[string]any) map[string]any {
 	allowed := map[domain.Role]map[string]bool{
-		domain.FlavorScout:    {"discoveryOrder": true, "accuracy": true, "completionMs": true, "favoriteFlavor": true},
-		domain.CrunchCreator:  {"occasion": true, "mood": true, "flavor": true, "background": true, "creativeStyle": true},
+		domain.CrunchHunter:   {"foundDifferenceIds": true, "completionMs": true, "correctTaps": true, "wrongTaps": true, "hintsUsed": true, "score": true, "speedBonus": true},
+		domain.FlavorReferee:  {"championId": true, "matchCount": true, "completionMs": true},
 		domain.SnackDetective: {"confidence": true, "accuracy": true, "difficultQuestions": true},
 		domain.QRRunner:       {"locationId": true},
 	}[role]

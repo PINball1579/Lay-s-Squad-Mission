@@ -16,6 +16,18 @@ export type Squad = {
 }
 export type Invitation = { token: string; squadId: string; expiresAt: string }
 export type MissionAttempt = { id: string; squadId: string; role: Role; challenge: Record<string, unknown>; status: string; startedAt: string; expiresAt: string }
+export type FlavorCupVoteResult = {
+  attempt: MissionAttempt
+  matchId: string
+  winnerId: string
+  leftFlavor: string
+  rightFlavor: string
+  selectedSide: 'left' | 'right'
+  round: number
+  championId?: string
+  created: boolean
+}
+export type FlavorPerformance = { flavorId: string; exposureCount: number; winCount: number; championCount: number; winRate: number }
 export type Dashboard = {
   uniquePlayers: number
   squadsCreated: number
@@ -24,11 +36,12 @@ export type Dashboard = {
   rewardsRedeemed: number
   eventsByName: Record<string, number>
   completionsByRole: Record<Role, number>
+  flavorPerformance: FlavorPerformance[]
 }
 
 export const roles: { code: Role; title: string; icon: string; description: string }[] = [
-  { code: 'flavor_scout', title: 'นักล่ารสชาติ', icon: '◎', description: 'ตามล่ารสชาติให้ครบตามลำดับ' },
-  { code: 'crunch_creator', title: 'ครีเอเตอร์สายครันช์', icon: '✦', description: 'ออกแบบโมเมนต์กินเลย์ให้เป็นสไตล์คุณ' },
+  { code: 'flavor_scout', title: 'Crunch Hunter', icon: '◎', description: 'จับผิดภาพชั้นวางให้ครบก่อนหมดเวลา' },
+  { code: 'crunch_creator', title: 'Flavor Referee', icon: '♛', description: 'เลือกผู้ชนะในศึก Flavor Cup' },
   { code: 'snack_detective', title: 'นักสืบสายสแน็ก', icon: '?', description: 'แก้ปริศนาและค้นหาคำตอบที่ซ่อนอยู่' },
   { code: 'qr_runner', title: 'นักวิ่ง QR', icon: '⌁', description: 'ค้นหาและยืนยันโค้ดจากจุดกิจกรรม' },
 ]

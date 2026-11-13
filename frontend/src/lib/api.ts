@@ -1,4 +1,4 @@
-import type { Consent, Dashboard, Invitation, MissionAttempt, Role, Squad, User } from '../types'
+import type { Consent, Dashboard, FlavorCupVoteResult, Invitation, MissionAttempt, Role, Squad, User } from '../types'
 
 let csrfToken = ''
 const retryKeys = new Map<string, string>()
@@ -66,6 +66,8 @@ export const api = {
   claimRole: (id: string, role: Role) => post<Squad>(`/squads/${id}/roles/${role}`, {}),
   mission: (role: Role) => request<Record<string, unknown>>(`/missions/${role}`),
   startMission: (id: string, role: Role) => post<MissionAttempt>(`/squads/${id}/missions/${role}/start`, {}),
+  flavorCupVote: (squadId: string, attemptId: string, matchId: string, winnerId: string, decisionMs: number) =>
+    post<FlavorCupVoteResult>(`/squads/${squadId}/missions/flavor-cup/${attemptId}/vote`, { matchId, winnerId, decisionMs }),
   completeMission: (id: string, role: Role, attemptId: string, properties: Record<string, unknown>) =>
     post<{ squad: Squad }>(`/squads/${id}/missions/${role}/complete`, { attemptId, properties }, { 'Idempotency-Key': stableIdempotencyKey(`mission:${id}:${role}`) }),
   validateQR: (token: string, attemptId: string) => post<{ locationId: string }>('/qr/validate', { token, attemptId }),

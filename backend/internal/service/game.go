@@ -142,6 +142,13 @@ func (g *Game) StartMission(userID, squadID string, role domain.Role) (domain.Mi
 	if g.completionByAssignment[squadID+":"+string(role)] != "" {
 		return domain.MissionAttempt{}, ErrInvalidState
 	}
+	if role == domain.FlavorReferee {
+		for _, existing := range g.attempts {
+			if existing.UserID == userID && existing.SquadID == squadID && existing.Role == role && existing.Status == "started" && existing.ExpiresAt.After(g.now()) {
+				return existing, nil
+			}
+		}
+	}
 	for id, previous := range g.attempts {
 		if previous.UserID == userID && previous.SquadID == squadID && previous.Role == role && previous.Status == "started" {
 			previous.Status = "failed"
@@ -149,9 +156,26 @@ func (g *Game) StartMission(userID, squadID string, role domain.Role) (domain.Mi
 		}
 	}
 	now := g.now()
-	attempt := domain.MissionAttempt{ID: g.newID(), SquadID: squadID, UserID: userID, Role: role, Challenge: NewMissionChallenge(role), Status: "started", StartedAt: now, ExpiresAt: now.Add(15 * time.Minute)}
+	attempt := domain.MissionAttempt{ID: g.newID(), SquadID: squadID, UserID: userID, Role: role, Challenge: NewMissionChallenge(role), Status: "started", StartedAt: now, ExpiresAt: now.Add(MissionAttemptTTL(role))}
 	g.attempts[attempt.ID] = attempt
 	return attempt, nil
+}
+
+func (g *Game) AdvanceFlavorCup(userID, squadID, attemptID string, vote domain.FlavorCupVote) (domain.FlavorCupVoteResult, error) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	attempt, ok := g.attempts[attemptID]
+	if !ok || attempt.UserID != userID || attempt.SquadID != squadID || attempt.Role != domain.FlavorReferee || attempt.Status != "started" || !attempt.ExpiresAt.After(g.now()) || !g.isActiveMemberLocked(userID, squadID) {
+		return domain.FlavorCupVoteResult{}, ErrAttemptInvalid
+	}
+	updated, result, err := ApplyFlavorCupVote(attempt.Challenge, vote)
+	if err != nil {
+		return domain.FlavorCupVoteResult{}, err
+	}
+	attempt.Challenge = updated
+	g.attempts[attemptID] = attempt
+	result.Attempt = attempt
+	return result, nil
 }
 
 func randomID() string {
@@ -488,6 +512,7 @@ func (g *Game) Dashboard() domain.Dashboard {
 	g.mu.RLock()
 	defer g.mu.RUnlock()
 	metrics := domain.Dashboard{UniquePlayers: len(g.users), SquadsCreated: len(g.squads), EventsByName: map[string]int{}, CompletionsByRole: map[domain.Role]int{}}
+	flavors := map[string]*domain.FlavorPerformance{}
 	for _, squad := range g.squads {
 		if squad.RewardUnlocked {
 			metrics.CompletedSquads++
@@ -499,11 +524,47 @@ func (g *Game) Dashboard() domain.Dashboard {
 	}
 	for _, completion := range g.completions {
 		metrics.CompletionsByRole[completion.Role]++
+		if completion.Role == domain.FlavorReferee {
+			if champion, _ := completion.Properties["championId"].(string); champion != "" {
+				entry := flavorMetric(flavors, champion)
+				entry.ChampionCount++
+			}
+		}
 	}
 	for _, event := range g.events {
 		metrics.EventsByName[event.Name]++
+		if event.Name == "flavor_cup_matchup_selected" {
+			left, _ := event.Properties["leftFlavor"].(string)
+			right, _ := event.Properties["rightFlavor"].(string)
+			winner, _ := event.Properties["winnerFlavor"].(string)
+			if left != "" {
+				flavorMetric(flavors, left).ExposureCount++
+			}
+			if right != "" {
+				flavorMetric(flavors, right).ExposureCount++
+			}
+			if winner != "" {
+				flavorMetric(flavors, winner).WinCount++
+			}
+		}
 	}
+	for _, entry := range flavors {
+		if entry.ExposureCount > 0 {
+			entry.WinRate = float64(entry.WinCount) / float64(entry.ExposureCount)
+		}
+		metrics.FlavorPerformance = append(metrics.FlavorPerformance, *entry)
+	}
+	sort.Slice(metrics.FlavorPerformance, func(i, j int) bool {
+		return metrics.FlavorPerformance[i].FlavorID < metrics.FlavorPerformance[j].FlavorID
+	})
 	return metrics
+}
+
+func flavorMetric(values map[string]*domain.FlavorPerformance, id string) *domain.FlavorPerformance {
+	if values[id] == nil {
+		values[id] = &domain.FlavorPerformance{FlavorID: id}
+	}
+	return values[id]
 }
 
 func (g *Game) Events() []domain.AnalyticsEvent {
@@ -568,27 +629,10 @@ func isOperationalEvent(name string) bool {
 
 func ValidateMissionAttempt(role domain.Role, challenge, properties map[string]any) bool {
 	switch role {
-	case domain.FlavorScout:
-		order, ok := properties["discoveryOrder"].([]any)
-		required, requiredOK := challenge["requiredOrder"].([]any)
-		duration, durationOK := numberProperty(properties, "completionMs")
-		if !ok || !requiredOK || len(order) != len(required) || len(order) != 3 || !durationOK || duration < 0 {
-			return false
-		}
-		for index := range required {
-			if order[index] != required[index] {
-				return false
-			}
-		}
-		return true
-	case domain.CrunchCreator:
-		for _, key := range []string{"occasion", "mood", "flavor", "background", "caption", "creativeStyle"} {
-			value, ok := properties[key].(string)
-			if !ok || strings.TrimSpace(value) == "" || len(value) > 100 {
-				return false
-			}
-		}
-		return properties["occasion"] == challenge["requiredOccasion"] && allowedString(properties["mood"], "Bold", "Cozy", "Playful", "Chill") && allowedString(properties["flavor"], "Sunny Salt", "Smoky BBQ", "Zesty Lime", "Spicy Spark") && allowedString(properties["background"], "Sunburst", "Warm waves", "Night pop") && properties["creativeStyle"] == "template-card"
+	case domain.CrunchHunter:
+		return CrunchHuntCompleted(challenge, properties)
+	case domain.FlavorReferee:
+		return FlavorCupCompleted(challenge, stringProperty(properties, "championId"))
 	case domain.SnackDetective:
 		answers, ok := properties["answers"].(map[string]any)
 		if !ok {
@@ -608,26 +652,12 @@ func ValidateMissionAttempt(role domain.Role, challenge, properties map[string]a
 }
 
 func NewMissionChallenge(role domain.Role) map[string]any {
+	return NewMissionChallengeWithConfig(role, nil)
+}
+
+func newLegacyMissionChallenge(role domain.Role) map[string]any {
 	challenge := map[string]any{"kind": string(role), "version": 1}
 	switch role {
-	case domain.FlavorScout:
-		values := []any{"Sunny Salt", "Smoky BBQ", "Zesty Lime"}
-		for index := len(values) - 1; index > 0; index-- {
-			swap, err := rand.Int(rand.Reader, big.NewInt(int64(index+1)))
-			if err != nil {
-				panic(fmt.Sprintf("secure random source unavailable: %v", err))
-			}
-			position := int(swap.Int64())
-			values[index], values[position] = values[position], values[index]
-		}
-		challenge["requiredOrder"] = values
-	case domain.CrunchCreator:
-		values := []string{"Movie night", "Game night", "Road trip", "Study break"}
-		choice, err := rand.Int(rand.Reader, big.NewInt(int64(len(values))))
-		if err != nil {
-			panic(fmt.Sprintf("secure random source unavailable: %v", err))
-		}
-		challenge["requiredOccasion"] = values[choice.Int64()]
 	case domain.SnackDetective:
 		choice, err := rand.Int(rand.Reader, big.NewInt(2))
 		if err != nil {
@@ -635,7 +665,7 @@ func NewMissionChallenge(role domain.Role) map[string]any {
 		}
 		if choice.Int64() == 1 {
 			challenge["variant"] = "location"
-			challenge["questions"] = []map[string]any{{"id": "q1", "prompt": "บทบาทใดมีหน้าที่ยืนยันจุดกิจกรรม?", "options": []string{"QR Runner", "Flavor Scout", "Crunch Creator"}}, {"id": "q2", "prompt": "เมื่อทีมทำครบทุกภารกิจจะเกิดอะไรขึ้น?", "options": []string{"Mock Crunch Badge", "Cash coupon", "Real product"}}}
+			challenge["questions"] = []map[string]any{{"id": "q1", "prompt": "บทบาทใดมีหน้าที่ยืนยันจุดกิจกรรม?", "options": []string{"QR Runner", "Crunch Hunter", "Flavor Referee"}}, {"id": "q2", "prompt": "เมื่อทีมทำครบทุกภารกิจจะเกิดอะไรขึ้น?", "options": []string{"Mock Crunch Badge", "Cash coupon", "Real product"}}}
 		} else {
 			challenge["variant"] = "squad"
 			challenge["questions"] = []map[string]any{{"id": "q1", "prompt": "How many unique roles complete a squad?", "options": []string{"Two", "Three", "Four"}}, {"id": "q2", "prompt": "What unlocks the Crunch Vault?", "options": []string{"All four missions", "One share", "A purchase"}}}

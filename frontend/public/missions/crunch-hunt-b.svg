@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" role="img" aria-label="ชั้นวางสินค้าแบบจำลอง ภาพ B">
+  <rect width="800" height="600" fill="#f5efe1"/><rect x="28" y="38" width="744" height="520" rx="24" fill="#d8c4a4"/>
+  <rect x="315" y="42" width="170" height="72" rx="12" fill="#42945b"/><text x="400" y="87" text-anchor="middle" font-family="sans-serif" font-size="28" font-weight="700" fill="white">PROMO</text>
+  <g fill="#715844"><rect x="55" y="180" width="690" height="18"/><rect x="55" y="350" width="690" height="18"/><rect x="55" y="520" width="690" height="18"/></g>
+  <g font-family="sans-serif" font-weight="700" text-anchor="middle">
+    <g transform="translate(220 205)"><path d="M0 0h110l-8 130H8z" fill="#42945b"/><circle cx="55" cy="60" r="30" fill="#fff"/><text x="55" y="68" fill="#d93b2b">CHIPS</text></g>
+    <g transform="translate(470 205)"><path d="M0 0h110l-8 130H8z" fill="#d85a35"/><circle cx="55" cy="60" r="30" fill="#fff"/><text x="55" y="68" fill="#d93b2b">CHIPS</text></g>
+    <g transform="translate(595 205)"><path d="M0 0h110l-8 130H8z" fill="#5e4c68"/><circle cx="55" cy="60" r="30" fill="#fff"/><text x="55" y="68" fill="#d93b2b">CHIPS</text></g>
+    <g transform="translate(95 375)"><path d="M0 0h110l-8 130H8z" fill="#78b9cf"/><circle cx="55" cy="60" r="30" fill="#fff"/><text x="55" y="68" fill="#d93b2b">CHIPS</text></g>
+    <g transform="translate(470 375)"><path d="M0 0h95l-8 130H8z" fill="#ef9d2f"/><circle cx="48" cy="60" r="27" fill="#fff"/><text x="48" y="68" fill="#d93b2b" font-size="14">CHIPS</text></g>
+    <g transform="translate(615 375)"><path d="M0 0h70l-6 130H6z" fill="#93b83e"/><circle cx="35" cy="60" r="22" fill="#fff"/><text x="35" y="65" fill="#d93b2b" font-size="11">CHIPS</text></g>
+  </g>
+  <rect x="295" y="415" width="78" height="28" rx="5" fill="white"/><text x="334" y="435" text-anchor="middle" font-family="sans-serif" font-weight="700" fill="#241d16">฿29</text>
+  <text x="400" y="580" text-anchor="middle" font-family="sans-serif" font-size="14" fill="#705e50">PLACEHOLDER SHELF — replace URLs in mission configuration</text>
+</svg>

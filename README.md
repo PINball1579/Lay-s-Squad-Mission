@@ -62,9 +62,14 @@ Go 1.27 and Node 24 are the pinned container toolchains. Local Go caches can be 
 2. Create a squad and generate the branded invitation card.
 3. Open the invitation link in separate private browser contexts. Each invited player chooses an identity, accepts consent, and is joined automatically without re-entering a code.
 4. Lock each unique role and complete its mission.
+   - **Crunch Hunter:** find all configured differences in the two shelf images before time expires.
+   - **Flavor Referee:** complete the persisted Flavor Cup bracket and crown a champion.
+   - **Snack Detective** and **QR Runner:** retain their existing journeys.
 5. Use `mock:demo-store` for QR Runner.
 6. The fourth idempotent completion unlocks the local fixture reward.
 7. Review consent-filtered metrics in `/admin`.
+
+Crunch Hunt images, normalized hotspots, timer, hints, and scoring and Flavor Cup flavors, descriptions, images, bracket size, `seedOrder`, `placementMode` (`random` or `alternate`), and share-card tokens are stored in migration-backed mission configuration. Replace the placeholder asset URLs/configuration without changing React or Go code. The persisted role codes remain `flavor_scout` and `crunch_creator` solely to preserve historical assignments, completions, and analytics.
 
 ## Real LINE mode
 
