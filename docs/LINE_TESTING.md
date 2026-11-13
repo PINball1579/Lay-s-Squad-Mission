@@ -18,6 +18,7 @@ refuses the tunnel's direct network connection.
    ```sh
    cd "$HOME/Documents/Liff_Idea/Lay-s-Squad-Mission"
    git pull --ff-only
+   bash scripts/configure-ocr.sh
    bash scripts/test-line.sh
    ```
 
@@ -25,7 +26,10 @@ refuses the tunnel's direct network connection.
    rejects `!override`. This starts a separate Compose project on port 5174
    with real LINE login and its own database. Your usual local stack and data
    are preserved. Generated secrets stay in ignored `.line-test/` files.
-   Receipt OCR uses `IAPP_API_KEY` from your existing private `.env`, if set.
+   The configuration command asks for your iApp key with hidden input and saves
+   it to private `.env`, preserving other settings. Run it once, or again when
+   changing the key. Startup checks that `IAPP_API_KEY` is configured before
+   creating the tunnel. This checks presence, not provider validity or credits.
    Do not put API keys into the LIFF endpoint or browser URL.
 
 3. Wait for **LINE test is ready**. Copy the displayed **Endpoint URL**.
@@ -61,3 +65,14 @@ Old invitation URLs use the previous address; create new invitations.
 For another LINE app, set `LINE_TEST_LIFF_ID` and `LINE_TEST_CHANNEL_ID` when
 running the script. No LINE channel secret or Messaging API access token is
 needed for this application's ID-token verification flow.
+
+## Receipt OCR says it is not connected
+
+The Thai message `ระบบอ่านใบเสร็จยังไม่ได้เชื่อมต่อ` means the API container
+started without `IAPP_API_KEY`. A key configured in the managed cloud is not
+automatically available on your Mac, and private `.env` files are not in Git.
+
+Stop the running `test-line.sh` session with Ctrl+C, then run
+`bash scripts/configure-ocr.sh` and `bash scripts/test-line.sh`. Update the LIFF
+Endpoint URL to the newly printed tunnel URL and reopen the app. Do not reset
+the database. Never share your key or full Compose configuration in chat.

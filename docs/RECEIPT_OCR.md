@@ -9,11 +9,21 @@ completed squads, and analytics. The former `/api/v1/qr/validate` route returns
 
 Set `IAPP_API_KEY` in your private `.env` file or deployment secret manager.
 Never prefix the key with `VITE_`, commit it, or put it in client-side code.
-Recreate the API container after changing the key:
+On your Mac, run `bash scripts/configure-ocr.sh` to enter the key privately
+and preserve existing `.env` settings. Keys configured in the managed cloud
+are not automatically copied to local clones.
+
+For the normal local stack, recreate the API container after changing the key:
 
 ```sh
 docker compose up -d --force-recreate api web
 ```
+
+For the separate LINE test stack, stop `scripts/test-line.sh` with Ctrl+C and
+run it again instead. Update the LIFF endpoint to its new HTTPS URL. Both
+methods preserve the database. The Thai error `ระบบอ่านใบเสร็จยังไม่ได้เชื่อมต่อ`
+specifically means the running API has no OCR key; it does not mean the receipt
+failed to include Lay's.
 
 Managed cloud environments that use the proxy CA must include the existing
 `docker-compose.cloud.yml` override. It mounts the CA for runtime API calls as

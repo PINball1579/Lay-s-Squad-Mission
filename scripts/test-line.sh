@@ -60,6 +60,21 @@ export VITE_LIFF_ID="${LINE_TEST_LIFF_ID:-2012602577-R4BMg7FW}"
 export LINE_CHANNEL_ID="${LINE_TEST_CHANNEL_ID:-2012602577}"
 compose config --quiet # Also checks support for the !override syntax.
 
+# Check the effective Compose value; exported variables can override .env.
+# Consume the configuration privately and never print the credential.
+if ! compose config --environment | awk '
+  /^IAPP_API_KEY=/ {
+    value = substr($0, length("IAPP_API_KEY=") + 1)
+    if (value !~ /^[[:space:]]*$/) configured = 1
+  }
+  END { exit !configured }
+'; then
+  echo 'Receipt OCR is not configured: IAPP_API_KEY is missing or empty.' >&2
+  echo 'Run: bash scripts/configure-ocr.sh' >&2
+  echo 'An exported IAPP_API_KEY overrides .env; unset it if it is empty.' >&2
+  exit 1
+fi
+
 echo 'Creating a temporary HTTPS link...'
 cloudflared tunnel --url http://127.0.0.1:5174 --protocol http2 --no-autoupdate \
   > .line-test/tunnel.log 2>&1 &
