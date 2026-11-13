@@ -274,6 +274,7 @@ func TestConcurrentFinalCompletionsUnlockExactlyOnce(t *testing.T) {
 	t.Cleanup(func() {
 		var inventoryID string
 		_ = store.db.QueryRow(`SELECT COALESCE(inventory_id::text,'') FROM reward_unlocks WHERE squad_id=$1`, squad.ID).Scan(&inventoryID)
+		_, _ = store.db.Exec(`DELETE FROM reward_redemptions WHERE unlock_id IN (SELECT id FROM reward_unlocks WHERE squad_id=$1)`, squad.ID)
 		_, _ = store.db.Exec(`DELETE FROM squads WHERE id=$1`, squad.ID)
 		if inventoryID != "" {
 			_, _ = store.db.Exec(`UPDATE reward_inventory SET state='available',reserved_at=NULL,redeemed_at=NULL WHERE id=$1`, inventoryID)
@@ -347,6 +348,32 @@ func TestConcurrentFinalCompletionsUnlockExactlyOnce(t *testing.T) {
 	}
 	if unlocks != 1 {
 		t.Fatalf("expected exactly one reward unlock, got %d", unlocks)
+	}
+	if _, err := store.RewardCoupon(users[0].ID, squad.ID); err == nil {
+		t.Fatal("coupon was disclosed before claim")
+	}
+	if _, _, err := store.RedeemReward(users[0].ID, squad.ID, "coupon-claim"); err != nil {
+		t.Fatal(err)
+	}
+	coupon, err := store.RewardCoupon(users[0].ID, squad.ID)
+	if err != nil || coupon.Code == "" {
+		t.Fatalf("coupon was unavailable after claim: %v", err)
+	}
+	var assigned string
+	if err := store.db.QueryRow(`SELECT ri.inventory_key FROM reward_unlocks ru JOIN reward_inventory ri ON ri.id=ru.inventory_id WHERE ru.squad_id=$1`, squad.ID).Scan(&assigned); err != nil || assigned != coupon.Code {
+		t.Fatalf("coupon did not match reserved inventory: %v", err)
+	}
+	reopened, err := Open(databaseURL, "demo-campaign", 4, time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	same, err := reopened.RewardCoupon(users[1].ID, squad.ID)
+	_ = reopened.Close()
+	if err != nil || same.Code != coupon.Code {
+		t.Fatalf("coupon did not persist across reopening: %v", err)
+	}
+	if _, err := store.RewardCoupon("outsider", squad.ID); err == nil {
+		t.Fatal("outsider read coupon")
 	}
 	if _, err := store.db.Exec(`DELETE FROM sessions WHERE id=$1`, sessionIDs[3]); err != nil {
 		t.Fatalf("completed QR session cleanup must preserve its attempt and completion: %v", err)

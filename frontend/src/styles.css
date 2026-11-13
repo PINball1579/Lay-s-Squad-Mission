@@ -87,6 +87,12 @@ body { background: #f7f5ee; }
 .admin-controls { max-width:100%; }.admin-controls input { min-width:0; width:210px; max-width:100%; }
 .mission-shell button[aria-label^="ภาพชั้นวาง"]:hover, .mission-shell button[aria-label^="ภาพชั้นวาง"]:active { transform:none; }
 .mission-shell button[aria-label^="ภาพชั้นวาง"] { cursor:crosshair; }
+.coupon-dialog { width:calc(100% - 32px); max-width:420px; max-height:90dvh; margin:auto; padding:0; border:0; border-radius:28px; box-shadow:0 30px 90px #0005; background:#fff; color:#241d16; }
+.coupon-dialog::backdrop { background:#17140ecc; backdrop-filter:blur(5px); }
+.coupon-dialog-body { padding:32px 24px 24px; position:relative; text-align:center; }
+.coupon-close { position:absolute; right:14px; top:10px; width:44px; height:44px; font-size:30px; border-radius:50%; }
+.coupon-ticket { margin:24px 0 18px; padding:20px 14px; border:2px dashed #d7b945; border-radius:18px; background:#fff9dc; }
+.coupon-ticket span { display:block; font-size:12px; color:#81713a; }.coupon-ticket code { display:block; margin-top:10px; overflow-wrap:anywhere; font-size:22px; font-weight:900; user-select:all; }
 @media (max-width:700px) {
  .campaign-page { padding:0 20px; }.brand-header { min-height:84px; margin-bottom:20px; }.brand-lockup img { width:48px; height:48px; }.brand-lockup > span { font-size:14px; }.edition-label { font-size:8px; letter-spacing:.8px; }
  .campaign-hero { grid-template-columns:1fr; }.hero-copy { padding:30px 27px 0; }.hero-copy h1 { font-size:43px; margin:18px 0; }.hero-copy > p:not(.eyebrow) { font-size:14px; }.hero-art { min-height:280px; }.hero-orbit { width:245px; height:245px; }.hero-emblem { width:140px; }.hero-sticker { top:20px; right:20px; width:65px; height:65px; font-size:10px; }.hero-mini-icons { bottom:22px; gap:10px; }.hero-mini-icons span { padding:10px; border-radius:12px; }.hero-word { font-size:48px; }

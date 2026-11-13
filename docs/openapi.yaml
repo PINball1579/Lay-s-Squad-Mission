@@ -110,7 +110,26 @@ paths:
     parameters: [{$ref: '#/components/parameters/SquadId'}]
     get:
       tags: [Rewards]
-      responses: {'200': {description: Reward state}}
+      summary: Get reward state and reveal the assigned coupon only after claim
+      responses:
+        '200':
+          description: Active squad members only; coupon is null before claim and stable afterward
+          headers:
+            Cache-Control: {schema: {type: string, const: no-store}}
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [unlocked, redeemed, coupon]
+                properties:
+                  unlocked: {type: boolean}
+                  redeemed: {type: boolean}
+                  coupon:
+                    oneOf:
+                      - {type: 'null'}
+                      - {type: object, required: [code, name, testOnly], properties: {code: {type: string}, name: {type: string}, testOnly: {type: boolean}}}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
   /squads/{squadId}/reward/redeem:
     parameters: [{$ref: '#/components/parameters/SquadId'}]
     post:

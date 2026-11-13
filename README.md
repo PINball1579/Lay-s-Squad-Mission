@@ -75,6 +75,8 @@ Invitation URLs expose Open Graph and Twitter Card metadata so public HTTPS depl
 
 ## Real LINE mode
 
+Follow [LINE activation](docs/LINE_ACTIVATION.md) for the complete channel/LIFF setup, real camera QR issuance, and coupon inventory/reveal flow.
+
 Set `MOCK_LIFF=false`, `VITE_LIFF_ID`, `LINE_CHANNEL_ID`, HTTPS `ALLOWED_ORIGIN`, `SECURE_COOKIES=true`, and fresh 32+ byte random values for `QR_SIGNING_SECRET`, `PSEUDONYM_KEY`, and `ADMIN_API_TOKEN`. Never use the local values outside a developer machine.
 
 The frontend initializes the official `@line/liff` SDK, requests login when needed, sends only `liff.getIDToken()` to the backend, and uses `shareTargetPicker`/`scanCodeV2` only when available and after user action. See [LINE integration](docs/line-integration.md).

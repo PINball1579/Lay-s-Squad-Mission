@@ -1,4 +1,4 @@
-import type { Consent, Dashboard, FlavorCupVoteResult, Invitation, MissionAttempt, Role, Squad, User } from '../types'
+import type { Consent, Dashboard, FlavorCupVoteResult, Invitation, MissionAttempt, RewardDetails, Role, Squad, User } from '../types'
 
 let csrfToken = ''
 const retryKeys = new Map<string, string>()
@@ -72,6 +72,7 @@ export const api = {
     post<{ squad: Squad }>(`/squads/${id}/missions/${role}/complete`, { attemptId, properties }, { 'Idempotency-Key': stableIdempotencyKey(`mission:${id}:${role}`) }),
   validateQR: (token: string, attemptId: string) => post<{ locationId: string }>('/qr/validate', { token, attemptId }),
   redeem: (id: string) => post<Squad>(`/squads/${id}/reward/redeem`, {}, { 'Idempotency-Key': stableIdempotencyKey(`reward:${id}`) }),
+  reward: (id: string) => request<RewardDetails>(`/squads/${id}/reward`, { cache: 'no-store' }),
   event: (name: string, details: Record<string, unknown> = {}) => post<{ stored: boolean }>('/events', { name, ...details }),
   adminMetrics: (token: string) => request<Dashboard>('/admin/metrics', { headers: { 'X-Admin-Token': token } }),
   async exportAdminEvents(token: string) {

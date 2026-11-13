@@ -15,6 +15,8 @@ export type Squad = {
   createdAt: string
 }
 export type Invitation = { token: string; squadId: string; expiresAt: string }
+export type RewardCoupon = { code: string; name: string; testOnly: boolean }
+export type RewardDetails = { unlocked: boolean; redeemed: boolean; coupon: RewardCoupon | null }
 export type MissionAttempt = { id: string; squadId: string; role: Role; challenge: Record<string, unknown>; status: string; startedAt: string; expiresAt: string }
 export type FlavorCupVoteResult = {
   attempt: MissionAttempt

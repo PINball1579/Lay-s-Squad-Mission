@@ -15,14 +15,23 @@ export type ShareInvitation = {
 }
 
 export class RealLineAdapter implements LineAdapter {
+  private initialization: Promise<void> | null = null
+
   async initialize() {
     const liffId = import.meta.env.VITE_LIFF_ID
     if (!liffId) throw new Error('VITE_LIFF_ID is required when mock LIFF mode is disabled')
-    await liff.init({ liffId, withLoginOnExternalBrowser: true })
+    if (!this.initialization) {
+      this.initialization = liff.init({ liffId, withLoginOnExternalBrowser: false }).then(() => undefined).catch(cause => { this.initialization = null; throw cause })
+    }
+    await this.initialization
   }
 
   getIDToken() { return liff.getIDToken() }
-  login() { liff.login({ redirectUri: window.location.href }) }
+  login() {
+    const invite = new URLSearchParams(window.location.search).get('invite')
+    if (invite) { try { sessionStorage.setItem('crunch:login-invite', invite) } catch { /* URL remains the fallback. */ } }
+    liff.login({ redirectUri: window.location.href })
+  }
 
   async share(invite: ShareInvitation) {
     if (!liff.isApiAvailable('shareTargetPicker')) return false
@@ -55,13 +64,13 @@ export class RealLineAdapter implements LineAdapter {
   async scanQR() {
     if (!liff.isApiAvailable('scanCodeV2')) return null
     const result = await liff.scanCodeV2()
-    return result.value ?? null
+    return result.value ?? ''
   }
 }
 
 export class MockLineAdapter implements LineAdapter {
   async initialize() { return undefined }
-  getIDToken() { return null }
+  getIDToken(): string | null { return null }
   login() { return undefined }
   async share() { return false }
   async scanQR() { return 'mock:demo-store' }

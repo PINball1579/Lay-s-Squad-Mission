@@ -70,6 +70,14 @@ type Invitation struct {
 	UsedBy    string    `json:"usedBy,omitempty"`
 }
 
+// RewardCoupon is disclosed only to active squad members after a claim.
+// Never attach it to squad snapshots, logs, or analytics.
+type RewardCoupon struct {
+	Code     string `json:"code"`
+	Name     string `json:"name"`
+	TestOnly bool   `json:"testOnly"`
+}
+
 type Completion struct {
 	ID             string         `json:"id"`
 	SquadID        string         `json:"squadId"`

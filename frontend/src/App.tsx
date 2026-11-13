@@ -2,6 +2,9 @@ import { useEffect, useState } from 'react'
 import { api, ApiError } from './lib/api'
 import { lineAdapter, shareOrCopy } from './lib/liff'
 import { MissionRunner } from './components/Missions'
+import { CouponDialog } from './components/CouponDialog'
+import { restoreAppSession } from './lib/session'
+import type { RewardCoupon } from './types'
 import { BrandHeader, CampaignFooter, MissionIcon } from './components/Brand'
 import { roles, type Dashboard, type MissionAttempt, type Role, type Squad, type User } from './types'
 
@@ -26,6 +29,7 @@ function thaiError(cause: unknown) {
 function clearInviteFromAddress() {
   const next = new URL(window.location.href)
   next.searchParams.delete('invite')
+  try { sessionStorage.removeItem('crunch:login-invite') } catch { /* Storage can be blocked in a webview. */ }
   window.history.replaceState({}, '', `${next.pathname}${next.search}${next.hash}`)
 }
 
@@ -35,7 +39,7 @@ export default function App() {
 }
 
 function PlayerApp() {
-  const [inviteToken] = useState(() => new URLSearchParams(window.location.search).get('invite') ?? '')
+  const [inviteToken] = useState(() => { const fromURL = new URLSearchParams(window.location.search).get('invite'); if (fromURL) return fromURL; try { return sessionStorage.getItem('crunch:login-invite') ?? '' } catch { return '' } })
   const [screen, setScreen] = useState<Screen>('loading')
   const [user, setUser] = useState<User | null>(null)
   const [squad, setSquad] = useState<Squad | null>(null)
@@ -47,17 +51,19 @@ function PlayerApp() {
   const [missionError, setMissionError] = useState('')
   const [error, setError] = useState('')
   const [actionBusy, setActionBusy] = useState(false)
+  const [coupon, setCoupon] = useState<RewardCoupon | null>(null)
 
   useEffect(() => {
     let active = true
     const boot = async () => {
       try {
         await lineAdapter.initialize()
-        const session = await api.me()
+        const session = await restoreAppSession(lineAdapter)
         if (!active) return
         if (session.consent.analyticsAllowed) await api.event('liff_opened', { properties: { deviceCategory: 'mobile' } }).catch(() => undefined)
         setUser(session.user)
         if (session.squad) {
+          clearInviteFromAddress()
           setSquad(session.squad)
           setScreen('squad')
         } else if (!session.consent.requiredAccepted) {
@@ -121,7 +127,7 @@ function PlayerApp() {
   if (screen === 'consent') return <ConsentScreen invited={Boolean(inviteToken)} onContinue={acceptConsent} />
   if (screen === 'lobby') return <Lobby user={user} onCreate={async (name) => { try { const result = await api.createSquad(name); setSquad(result.squad); setScreen('squad') } catch (cause) { showError(cause) } }} />
   if (screen === 'mission' && squad && missionRole && missionAttempt) return <MissionRunner role={missionRole} challenge={missionAttempt.challenge} expiresAt={missionAttempt.expiresAt} errorMessage={missionError} line={lineAdapter} validateQR={(token) => api.validateQR(token, missionAttempt.id)} onFlavorVote={(matchId, winnerId, decisionMs) => api.flavorCupVote(squad.id, missionAttempt.id, matchId, winnerId, decisionMs)} track={(name, properties) => api.event(name, { squadId: squad.id, properties }).then(() => undefined).catch(() => undefined)} onBack={() => { setMissionAttempt(null); setMissionError(''); setScreen('squad') }} onComplete={async (properties) => { try { const result = await api.completeMission(squad.id, missionRole, missionAttempt.id, properties); setSquad(result.squad); setMissionAttempt(null); setMissionError(''); setScreen('squad') } catch (cause) { if (cause instanceof ApiError && cause.code === 'attempt_invalid') { setMissionAttempt(null); setMissionError(''); setMissionNotice('รอบภารกิจหมดอายุหรือถูกแทนที่ กดเริ่มใหม่ได้เลย'); setScreen('squad') } else if (cause instanceof ApiError && cause.code === 'mission_not_complete') { setMissionError('คำตอบยังไม่ครบตามโจทย์ ลองตรวจอีกครั้ง') } else showError(cause) } }} />
-  if (squad) return <SquadScreen user={user} squad={squad} shareNotice={shareNotice} startingRole={startingRole} actionBusy={actionBusy} missionNotice={missionNotice} onRole={async (role) => { if (actionBusy) return; setActionBusy(true); try { setSquad(await api.claimRole(squad.id, role)); setMissionNotice('ล็อกภารกิจเรียบร้อย เริ่มลุยได้เลย!') } catch (cause) { setMissionNotice(thaiError(cause)) } finally { setActionBusy(false) } }} onMission={async (role) => { if (startingRole) return; setStartingRole(role); setMissionNotice(''); try { const attempt = await api.startMission(squad.id, role); setMissionRole(role); setMissionAttempt(attempt); setScreen('mission') } catch (cause) { setMissionNotice(thaiError(cause)) } finally { setStartingRole(null) } }} onInvite={async () => { try { setShareNotice(''); const next = await api.invite(squad.id); const url = `${window.location.origin}${window.location.pathname}?invite=${encodeURIComponent(next.token)}`; void api.event('share_initiated', { squadId: squad.id }).catch(() => undefined); const result = await shareOrCopy(lineAdapter, { url, squadName: squad.name, expiresLabel: `ลิงก์หมดอายุ ${new Date(next.expiresAt).toLocaleString('th-TH')}` }); setShareNotice(result === 'line' ? 'ส่งคำเชิญแล้ว!' : 'คัดลอกแล้ว!'); window.setTimeout(() => setShareNotice(''), 2600); void api.event('share_completed', { squadId: squad.id, properties: { result } }).catch(() => undefined) } catch (cause) { setMissionNotice(thaiError(cause)) } }} onRedeem={async () => { if (actionBusy) return; setActionBusy(true); try { setSquad(await api.redeem(squad.id)) } catch (cause) { setMissionNotice(thaiError(cause)) } finally { setActionBusy(false) } }} />
+  if (squad) return <SquadScreen user={user} squad={squad} coupon={coupon} onCouponClose={() => setCoupon(null)} shareNotice={shareNotice} startingRole={startingRole} actionBusy={actionBusy} missionNotice={missionNotice} onRole={async (role) => { if (actionBusy) return; setActionBusy(true); try { setSquad(await api.claimRole(squad.id, role)); setMissionNotice('ล็อกภารกิจเรียบร้อย เริ่มลุยได้เลย!') } catch (cause) { setMissionNotice(thaiError(cause)) } finally { setActionBusy(false) } }} onMission={async (role) => { if (startingRole) return; setStartingRole(role); setMissionNotice(''); try { const attempt = await api.startMission(squad.id, role); setMissionRole(role); setMissionAttempt(attempt); setScreen('mission') } catch (cause) { setMissionNotice(thaiError(cause)) } finally { setStartingRole(null) } }} onInvite={async () => { try { setShareNotice(''); const next = await api.invite(squad.id); const url = `${window.location.origin}${window.location.pathname}?invite=${encodeURIComponent(next.token)}`; void api.event('share_initiated', { squadId: squad.id }).catch(() => undefined); const result = await shareOrCopy(lineAdapter, { url, squadName: squad.name, expiresLabel: `ลิงก์หมดอายุ ${new Date(next.expiresAt).toLocaleString('th-TH')}` }); setShareNotice(result === 'line' ? 'ส่งคำเชิญแล้ว!' : 'คัดลอกแล้ว!'); window.setTimeout(() => setShareNotice(''), 2600); void api.event('share_completed', { squadId: squad.id, properties: { result } }).catch(() => undefined) } catch (cause) { setMissionNotice(thaiError(cause)) } }} onRedeem={async () => { if (actionBusy) return; setActionBusy(true); try { if (!squad.rewardRedeemed) setSquad(await api.redeem(squad.id)); const details = await api.reward(squad.id); if (!details.coupon) throw new Error('Coupon unavailable'); setCoupon(details.coupon) } catch (cause) { setMissionNotice(thaiError(cause)) } finally { setActionBusy(false) } }} />
   return null
 }
 
@@ -156,7 +162,7 @@ function Lobby({ user, onCreate }: { user: User; onCreate: (name: string) => Pro
   </main>
 }
 
-function SquadScreen({ user, squad, shareNotice, startingRole, actionBusy, missionNotice, onRole, onMission, onInvite, onRedeem }: { user: User; squad: Squad; shareNotice: string; startingRole: Role | null; actionBusy: boolean; missionNotice: string; onRole: (role: Role) => Promise<void>; onMission: (role: Role) => Promise<void>; onInvite: () => Promise<void>; onRedeem: () => Promise<void> }) {
+function SquadScreen({ user, squad, coupon, onCouponClose, shareNotice, startingRole, actionBusy, missionNotice, onRole, onMission, onInvite, onRedeem }: { user: User; squad: Squad; coupon: RewardCoupon | null; onCouponClose: () => void; shareNotice: string; startingRole: Role | null; actionBusy: boolean; missionNotice: string; onRole: (role: Role) => Promise<void>; onMission: (role: Role) => Promise<void>; onInvite: () => Promise<void>; onRedeem: () => Promise<void> }) {
   const current = squad.members.find((member) => member.userId === user.id)
   const claimed = new Set(squad.members.map((member) => member.role))
   const complete = squad.members.filter((member) => member.completed).length
@@ -169,7 +175,8 @@ function SquadScreen({ user, squad, shareNotice, startingRole, actionBusy, missi
     {current?.completed && !squad.rewardUnlocked && <section className="completion-note" role="status"><span>✓</span><div><h2>ภารกิจของคุณสำเร็จแล้ว!</h2><p>อีก {4 - complete} ภารกิจจะเปิด Crunch Vault ชวนเพื่อนในทีมลุยต่อได้เลย</p></div></section>}
     {!current?.role && <section className="mt-5 rounded-[2rem] bg-crunch-ink p-5 text-white"><p className="text-xs font-black uppercase tracking-[.18em] text-crunch-yellow">ขั้นตอนต่อไป</p><h2 className="mt-1 text-2xl font-black">เลือกและล็อกภารกิจของคุณ</h2><p className="mt-2 text-white/70">หนึ่งคนรับหนึ่งภารกิจ เลือกแล้วเปลี่ยนไม่ได้</p></section>}
     {missionNotice && <p role="status" className="mt-4 rounded-xl bg-white p-3 font-bold text-crunch-red">{missionNotice}</p>}
-    {squad.rewardUnlocked && <section className="vault-panel mt-5 rounded-[2rem] bg-crunch-ink p-6 text-center text-white"><span className="text-5xl" aria-hidden>✦</span><h2 className="mt-2 text-3xl font-black">Crunch Vault เปิดแล้ว!</h2><p className="mt-2">{squad.rewardRedeemed ? 'บันทึกการรับสิทธิ์ของทีมเรียบร้อยแล้ว' : 'ทีมของคุณทำครบทั้ง 4 ภารกิจแล้ว'}</p><button disabled={squad.rewardRedeemed || actionBusy} onClick={onRedeem} className="mt-4 min-h-12 rounded-2xl bg-crunch-yellow px-6 font-black text-crunch-ink disabled:opacity-50">{squad.rewardRedeemed ? 'รับสิทธิ์แล้ว' : actionBusy ? 'กำลังบันทึก…' : 'รับสิทธิ์รางวัล'}</button></section>}
+    {squad.rewardUnlocked && <section className="vault-panel mt-5 rounded-[2rem] bg-crunch-ink p-6 text-center text-white"><span className="text-5xl" aria-hidden>✦</span><h2 className="mt-2 text-3xl font-black">Crunch Vault เปิดแล้ว!</h2><p className="mt-2">{squad.rewardRedeemed ? 'บันทึกการรับสิทธิ์ของทีมเรียบร้อยแล้ว' : 'ทีมของคุณทำครบทั้ง 4 ภารกิจแล้ว'}</p><button disabled={actionBusy} onClick={onRedeem} className="mt-4 min-h-12 rounded-2xl bg-crunch-yellow px-6 font-black text-crunch-ink disabled:opacity-50">{actionBusy ? 'กำลังโหลด…' : squad.rewardRedeemed ? 'ดูรหัสคูปอง' : 'รับสิทธิ์รางวัล'}</button></section>}
+    {coupon && <CouponDialog coupon={coupon} onClose={onCouponClose} />}
     <section className="mt-5 grid gap-3" aria-label="ภารกิจของทีม">{roles.map((role) => {
       const member = squad.members.find((item) => item.role === role.code)
       const mine = current?.role === role.code

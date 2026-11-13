@@ -45,6 +45,10 @@ func main() {
 		logger.Error("production mode requires SECURE_COOKIES=true")
 		os.Exit(1)
 	}
+	if !mockMode && strings.TrimSpace(os.Getenv("LINE_CHANNEL_ID")) == "" {
+		logger.Error("production mode requires LINE_CHANNEL_ID for server-side LINE Login verification")
+		os.Exit(1)
+	}
 
 	var game httpapi.GameStore
 	var sessions httpapi.SessionStore

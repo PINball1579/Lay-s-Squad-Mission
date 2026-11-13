@@ -763,7 +763,9 @@ func (g *Game) RedeemReward(userID, squadID, idempotencyKey string) (domain.Squa
 		if existing != idempotencyKey {
 			return domain.Squad{}, false, service.ErrConflict
 		}
-		tx.Commit()
+		if err = tx.Commit(); err != nil {
+			return domain.Squad{}, false, err
+		}
 		squad, e := g.loadSquad(ctx, g.db, squadID)
 		return squad, false, e
 	}
@@ -833,6 +835,20 @@ func (g *Game) LeaveSquad(userID, squadID string) (domain.Squad, error) {
 		return domain.Squad{}, err
 	}
 	return g.loadSquad(ctx, g.db, squadID)
+}
+
+func (g *Game) RewardCoupon(userID, squadID string) (domain.RewardCoupon, error) {
+	if !validUUID(squadID) {
+		return domain.RewardCoupon{}, service.ErrUnauthorized
+	}
+	ctx, cancel := g.context()
+	defer cancel()
+	var coupon domain.RewardCoupon
+	err := g.db.QueryRowContext(ctx, `SELECT ri.inventory_key,r.name,(r.kind='digital_mock' OR ri.inventory_key LIKE 'MOCK-%') FROM reward_unlocks ru JOIN reward_redemptions rr ON rr.unlock_id=ru.id JOIN reward_inventory ri ON ri.id=ru.inventory_id AND ri.state='redeemed' JOIN rewards r ON r.id=ru.reward_id JOIN squad_members sm ON sm.squad_id=ru.squad_id AND sm.campaign_id=ru.campaign_id AND sm.state='active' JOIN users u ON u.id=sm.user_id WHERE ru.squad_id=$1 AND ru.campaign_id=$2 AND u.pseudonymous_id=$3 AND EXISTS(SELECT 1 FROM consent_records c WHERE c.id=(SELECT id FROM consent_records WHERE user_id=u.id AND campaign_id=$2 ORDER BY recorded_at DESC LIMIT 1) AND c.required_accepted)`, squadID, g.campaignID, userID).Scan(&coupon.Code, &coupon.Name, &coupon.TestOnly)
+	if errors.Is(err, sql.ErrNoRows) {
+		return domain.RewardCoupon{}, service.ErrUnauthorized
+	}
+	return coupon, err
 }
 
 func (g *Game) GetSquad(userID, squadID string) (domain.Squad, error) {

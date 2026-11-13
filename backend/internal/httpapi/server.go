@@ -47,6 +47,7 @@ type GameStore interface {
 	QRProof(string, string, string) (domain.QRProof, error)
 	CompleteMission(string, string, domain.Role, string, string, map[string]any) (domain.Squad, domain.Completion, bool, error)
 	RedeemReward(string, string, string) (domain.Squad, bool, error)
+	RewardCoupon(string, string) (domain.RewardCoupon, error)
 	LeaveSquad(string, string) (domain.Squad, error)
 	GetSquad(string, string) (domain.Squad, error)
 	CurrentSquad(string) (domain.Squad, bool)
@@ -588,7 +589,17 @@ func (s *Server) getReward(w http.ResponseWriter, r *http.Request) {
 		writeServiceError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"unlocked": squad.RewardUnlocked, "redeemed": squad.RewardRedeemed, "reward": map[string]string{"name": "สิทธิ์รางวัลพิเศษจาก Lay's Crunch Squad", "status": "พร้อมใช้เมื่อทีมทำครบทั้ง 4 ภารกิจ"}})
+	w.Header().Set("Cache-Control", "no-store")
+	var coupon *domain.RewardCoupon
+	if squad.RewardRedeemed {
+		value, err := s.game.RewardCoupon(sess.UserID, squad.ID)
+		if err != nil {
+			writeServiceError(w, err)
+			return
+		}
+		coupon = &value
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"unlocked": squad.RewardUnlocked, "redeemed": squad.RewardRedeemed, "coupon": coupon})
 }
 
 func (s *Server) redeemReward(w http.ResponseWriter, r *http.Request) {

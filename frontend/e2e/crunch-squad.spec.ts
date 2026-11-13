@@ -23,7 +23,7 @@ test('four-player journey, race handling, consent, QR, reward, and dashboard', a
   const browser = process.env.PLAYWRIGHT_CDP_ENDPOINT
     ? await chromium.connectOverCDP(process.env.PLAYWRIGHT_CDP_ENDPOINT)
     : await chromium.launch(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH
-      ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH }
+      ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH, args: process.env.PLAYWRIGHT_CAMERA_FILE ? ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream', `--use-file-for-fake-video-capture=${process.env.PLAYWRIGHT_CAMERA_FILE}`] : [] }
       : undefined)
   const players = await Promise.all(['mali', 'nok', 'beam', 'ploy'].map(async () => {
     const context = await browser.newContext({ ...browserContextOptions() })
@@ -108,11 +108,29 @@ test('four-player journey, race handling, consent, QR, reward, and dashboard', a
   await ploy.getByLabel('รหัสสำหรับทดสอบภายใน').fill('not-a-valid-code')
   await ploy.getByRole('button', { name: /ยืนยันโค้ด/i }).click()
   await expect(ploy.getByRole('status')).toContainText(/โค้ดไม่ถูกต้อง/i)
-  await ploy.getByLabel('รหัสสำหรับทดสอบภายใน').fill('mock:demo-store')
-  await ploy.getByRole('button', { name: /ยืนยันโค้ด/i }).click()
+  if (process.env.PLAYWRIGHT_CAMERA_FILE) {
+    await ploy.getByRole('button', { name: 'เปิดกล้องสแกน QR' }).click()
+  } else {
+    await ploy.getByLabel('รหัสสำหรับทดสอบภายใน').fill('mock:demo-store')
+    await ploy.getByRole('button', { name: /ยืนยันโค้ด/i }).click()
+  }
   await expect(ploy.getByRole('heading', { name: /Crunch Vault เปิดแล้ว/i })).toBeVisible()
+  const beforeClaim = await contexts[3].request.get(`/api/v1/squads/${createBody.squad.id}/reward`)
+  expect((await beforeClaim.json()).coupon).toBeNull()
   await ploy.getByRole('button', { name: /รับสิทธิ์รางวัล/i }).click()
-  await expect(ploy.getByRole('button', { name: /รับสิทธิ์แล้ว/i })).toBeDisabled()
+  const couponDialog = ploy.getByRole('dialog', { name: 'รับสิทธิ์เรียบร้อยแล้ว!' })
+  await expect(couponDialog).toBeVisible()
+  const couponCode = await couponDialog.locator('code').innerText()
+  expect(couponCode).toMatch(/^MOCK-/)
+  const claimedReward = await contexts[3].request.get(`/api/v1/squads/${createBody.squad.id}/reward`)
+  expect(claimedReward.headers()['cache-control']).toBe('no-store')
+  await couponDialog.getByRole('button', { name: 'คัดลอกรหัสคูปอง' }).click()
+  await expect(couponDialog.getByRole('status')).toContainText('คัดลอกรหัสคูปองแล้ว!')
+  await couponDialog.getByRole('button', { name: 'ปิดคูปอง' }).click()
+  await ploy.reload()
+  await ploy.getByRole('button', { name: 'ดูรหัสคูปอง' }).click()
+  await expect(couponDialog.locator('code')).toHaveText(couponCode)
+  await couponDialog.getByRole('button', { name: 'ปิดคูปอง' }).click()
 
   const fifth = await request.newContext({ baseURL: baseURL ?? 'http://localhost:5173' })
   const auth = await fifth.post('/api/v1/auth/mock', { data: { mockUserId: 'test-runner' } })
@@ -121,6 +139,8 @@ test('four-player journey, race handling, consent, QR, reward, and dashboard', a
   const full = await fifth.post('/api/v1/squads/join', { headers: { 'X-CSRF-Token': csrfToken }, data: { token: invite } })
   expect(full.status()).toBe(409)
   expect((await full.json()).error.code).toBe('squad_full')
+  const privateCoupon = await fifth.get(`/api/v1/squads/${createBody.squad.id}/reward`)
+  expect(privateCoupon.ok()).toBe(false)
   await fifth.dispose()
 
   await ploy.goto('/admin')

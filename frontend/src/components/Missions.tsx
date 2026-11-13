@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import type { FlavorCupVoteResult, Role } from '../types'
 import { copyText, type LineAdapter } from '../lib/liff'
 import { BrandHeader, CampaignFooter } from './Brand'
+import { CameraScanner } from './CameraScanner'
 
 type Track = (name: string, properties: Record<string, unknown>) => Promise<void>
 
@@ -289,15 +290,34 @@ export function QRRunner({ line, validateQR, onComplete }: Pick<Props, 'line' | 
   const localMode = import.meta.env.VITE_MOCK_LIFF !== 'false'
   const [token, setToken] = useState(localMode ? 'mock:demo-store' : '')
   const [status, setStatus] = useState('')
+  const [scanning, setScanning] = useState(false)
   const { pending, run } = usePendingAction()
   const verifyValue = async (value: string) => {
     try { const result = await validateQR(value); setStatus(`ยืนยันแล้วที่ ${result.locationId}`); await onComplete({ locationId: result.locationId, conversion: true }) }
     catch { setStatus('โค้ดไม่ถูกต้องหรือหมดอายุ กรุณาลองอีกครั้ง') }
   }
-  const scan = () => run(async () => { const value = await line.scanQR(); if (value) { setToken(value); await verifyValue(value) } else setStatus('อุปกรณ์นี้ไม่รองรับการสแกน กรอกรหัสแทนได้') })
+  const scan = () => run(async () => {
+    setStatus('')
+    if (!localMode) {
+      try {
+        const value = await line.scanQR()
+        if (value === '') { setStatus('ยกเลิกการสแกนแล้ว'); return }
+        if (value) { setToken(value); await verifyValue(value); return }
+      } catch { /* The browser camera remains available when LIFF scanning is unsupported. */ }
+    }
+    setScanning(true)
+  })
+  const onCameraResult = useCallback((value: string) => {
+    setScanning(false)
+    setToken(value)
+    void run(() => verifyValue(value))
+  // This callback only runs while this scanner is mounted for the current attempt.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   return <MissionShell eyebrow="นักวิ่ง QR" title="สแกน ยืนยัน แล้วครันช์!">
     <div className="mx-auto grid aspect-square max-w-56 place-items-center rounded-3xl border-8 border-crunch-ink bg-white text-center"><span className="text-5xl" aria-hidden>⌁</span><small>สแกนโค้ด<br />ที่จุดกิจกรรม</small></div>
-    <button disabled={pending} onClick={() => void scan()} className="mt-5 min-h-14 w-full rounded-2xl bg-crunch-ink font-black text-white disabled:opacity-40">เปิดกล้องสแกน QR</button>
+    <button disabled={pending || scanning} onClick={() => void scan()} className="mt-5 min-h-14 w-full rounded-2xl bg-crunch-ink font-black text-white disabled:opacity-40">เปิดกล้องสแกน QR</button>
+    {scanning && <CameraScanner onResult={onCameraResult} onClose={() => setScanning(false)} />}
     <label className="mt-4 block font-bold">{localMode ? 'รหัสสำหรับทดสอบภายใน' : 'หรือกรอกรหัสจากจุดกิจกรรม'}<input disabled={pending} value={token} onChange={(event) => setToken(event.target.value)} className="mt-1 min-h-12 w-full rounded-xl border-2 border-crunch-ink/20 px-3 disabled:opacity-40" /></label>
     <button disabled={pending || !token} onClick={() => void run(() => verifyValue(token))} className="mt-3 min-h-14 w-full rounded-2xl bg-crunch-red font-black text-white disabled:opacity-40">{pending ? 'กำลังยืนยัน…' : 'ยืนยันโค้ด'}</button>
     <p className="mt-3 font-bold" role="status">{status}</p>

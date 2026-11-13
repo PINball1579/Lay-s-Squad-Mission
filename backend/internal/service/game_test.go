@@ -334,6 +334,9 @@ func TestMissionSuccessCriteriaAndConcurrentRewardRedemption(t *testing.T) {
 		}
 	}
 	results := make(chan bool, 2)
+	if _, err := game.RewardCoupon(users[0].ID, squad.ID); !errors.Is(err, ErrInvalidState) {
+		t.Fatalf("coupon disclosed before claim: %v", err)
+	}
 	var wg sync.WaitGroup
 	for range 2 {
 		wg.Add(1)
@@ -353,5 +356,16 @@ func TestMissionSuccessCriteriaAndConcurrentRewardRedemption(t *testing.T) {
 	}
 	if created != 1 {
 		t.Fatalf("expected one redemption transition, got %d", created)
+	}
+	coupon, err := game.RewardCoupon(users[0].ID, squad.ID)
+	if err != nil || coupon.Code == "" || !coupon.TestOnly {
+		t.Fatalf("missing claimed test coupon: %v", err)
+	}
+	same, err := game.RewardCoupon(users[1].ID, squad.ID)
+	if err != nil || same.Code != coupon.Code {
+		t.Fatalf("squad members did not receive the same coupon: %v", err)
+	}
+	if _, err := game.RewardCoupon("outsider", squad.ID); !errors.Is(err, ErrUnauthorized) {
+		t.Fatalf("outsider read coupon: %v", err)
 	}
 }

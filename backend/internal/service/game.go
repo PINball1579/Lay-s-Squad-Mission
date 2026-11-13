@@ -465,6 +465,21 @@ func (g *Game) LeaveSquad(userID, squadID string) (domain.Squad, error) {
 	return cloneSquad(squad), nil
 }
 
+func (g *Game) RewardCoupon(userID, squadID string) (domain.RewardCoupon, error) {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+	if !g.isActiveMemberLocked(userID, squadID) {
+		return domain.RewardCoupon{}, ErrUnauthorized
+	}
+	if !g.consents[userID].RequiredAccepted {
+		return domain.RewardCoupon{}, ErrConsentRequired
+	}
+	if !g.squads[squadID].RewardRedeemed {
+		return domain.RewardCoupon{}, ErrInvalidState
+	}
+	return domain.RewardCoupon{Code: "TEST-" + g.rewardUnlocks[squadID], Name: "คูปองทีม Lay's Crunch Squad", TestOnly: true}, nil
+}
+
 func (g *Game) GetSquad(userID, squadID string) (domain.Squad, error) {
 	g.mu.RLock()
 	defer g.mu.RUnlock()
