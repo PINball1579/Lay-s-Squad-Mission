@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import type { FlavorCupVoteResult, Role } from '../types'
-import type { LineAdapter } from '../lib/liff'
+import { copyText, type LineAdapter } from '../lib/liff'
 
 type Track = (name: string, properties: Record<string, unknown>) => Promise<void>
 
@@ -18,7 +18,7 @@ type Props = {
 }
 
 export function MissionRunner({ role, challenge, expiresAt, errorMessage, line, validateQR, onFlavorVote, track, onComplete, onBack }: Props) {
-  return <main className="mx-auto min-h-screen max-w-3xl px-4 py-5 sm:px-6">
+  return <main className="screen-enter mx-auto min-h-screen max-w-4xl px-4 py-5 sm:px-6">
     <button className="mb-5 min-h-11 rounded-full bg-white/80 px-4 font-bold" onClick={onBack}>← กลับไปหาทีม</button>
     <p className="mb-3 text-center text-sm font-bold">โจทย์นี้ใช้ได้ถึง {new Date(expiresAt).toLocaleTimeString('th-TH')}</p>
     {errorMessage && <p role="alert" className="mb-3 rounded-xl bg-red-100 p-3 font-bold text-red-900">{errorMessage}</p>}
@@ -30,7 +30,7 @@ export function MissionRunner({ role, challenge, expiresAt, errorMessage, line, 
 }
 
 function MissionShell({ eyebrow, title, children }: { eyebrow: string; title: string; children: React.ReactNode }) {
-  return <section className="rounded-[2rem] bg-white p-4 shadow-pop sm:p-6" aria-labelledby="mission-title"><p className="text-sm font-black uppercase tracking-[.14em] text-crunch-red">{eyebrow}</p><h1 id="mission-title" className="mt-1 text-3xl font-black text-crunch-ink">{title}</h1><div className="mt-5">{children}</div></section>
+  return <section className="interactive-card overflow-hidden rounded-[2rem] bg-white shadow-pop" aria-labelledby="mission-title"><header className="relative overflow-hidden bg-crunch-ink px-5 py-6 text-white sm:px-7"><div aria-hidden className="absolute -right-8 -top-12 h-36 w-36 rounded-full bg-crunch-yellow/20" /><div aria-hidden className="absolute -bottom-10 right-20 h-20 w-20 rounded-full bg-crunch-red/30" /><p className="relative text-sm font-black uppercase tracking-[.14em] text-crunch-yellow">{eyebrow}</p><h1 id="mission-title" className="relative mt-1 text-3xl font-black">{title}</h1></header><div className="p-4 sm:p-6">{children}</div></section>
 }
 
 function usePendingAction() {
@@ -150,10 +150,10 @@ export function CrunchHunt({ challenge = {}, onComplete, track = async () => und
   })
 
   return <MissionShell eyebrow="Crunch Hunter" title="Crunch Hunt — Spot the Shelf">
-    <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-crunch-ink p-3 text-white"><strong>เวลา {timeLeft} วินาที</strong><strong>พบ {found.length}/{differences.length}</strong><strong>คะแนน {finalScore}</strong></div>
+    <div className="grid grid-cols-3 gap-2 rounded-2xl bg-crunch-cream p-2 text-center"><div className="rounded-xl bg-white p-2"><small className="block text-crunch-ink/55">เวลา</small><strong>{timeLeft} วิ</strong></div><div className="rounded-xl bg-white p-2"><small className="block text-crunch-ink/55">เจอแล้ว</small><strong>{found.length}/{differences.length}</strong></div><div className="rounded-xl bg-white p-2"><small className="block text-crunch-ink/55">คะแนน</small><strong>{finalScore}</strong></div></div>
     {!loaded.every(Boolean) && <p role="status" className="mt-3 rounded-xl bg-crunch-yellow/30 p-3 font-bold">กำลังโหลดภาพทั้งสองภาพ — เวลาจะยังไม่เริ่ม</p>}
     <div className="mt-4 grid gap-3 sm:grid-cols-2" aria-label="ภาพจับผิดชั้นวาง">
-      {[images.left, images.right].map((source, imageIndex) => <button type="button" key={imageIndex} aria-label={`ภาพชั้นวาง ${imageIndex === 0 ? 'A' : 'B'}`} onClick={tap} className="relative aspect-[4/3] min-h-0 overflow-auto rounded-2xl border-4 border-crunch-ink/15 bg-crunch-cream p-0 [touch-action:pinch-zoom]">
+      {[images.left, images.right].map((source, imageIndex) => <button type="button" key={imageIndex} aria-label={`ภาพชั้นวาง ${imageIndex === 0 ? 'A' : 'B'}`} onClick={tap} className="relative aspect-[4/3] min-h-0 overflow-auto rounded-2xl border-4 border-crunch-ink/15 bg-crunch-cream p-0 shadow-sm [touch-action:pinch-zoom]">
         <img src={source} alt="" draggable={false} onLoad={() => markLoaded(imageIndex)} className="h-full w-full select-none object-contain" />
         {differences.filter((item) => found.includes(item.id) || hinted.includes(item.id)).map((item) => <span key={item.id} aria-hidden className={`pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 rounded-full border-4 ${found.includes(item.id) ? 'border-green-500 bg-green-300/30' : 'animate-pulse border-crunch-red bg-crunch-yellow/30'}`} style={{ left: `${item.x * 100}%`, top: `${item.y * 100}%`, width: `${item.radius * 200}%`, aspectRatio: '1' }} />)}
       </button>)}
@@ -179,6 +179,8 @@ export function FlavorCup({ challenge, onVote, onComplete, track = async () => u
   const current = tournament.matches.find((match) => match.id === tournament.currentMatchId)
   const flavor = (id?: string) => tournament.flavors.find((item) => item.id === id)
   const champion = flavor(tournament.championId)
+  const totalSelections = tournament.bracketSize - 1
+  const progress = Math.round((tournament.selectionCount / totalSelections) * 100)
 
   useEffect(() => {
     const openedAt = Date.now()
@@ -207,8 +209,10 @@ export function FlavorCup({ challenge, onVote, onComplete, track = async () => u
     if (!champion) return
     const text = shareCard.message.replaceAll('{flavor}', champion.name)
     let result = 'clipboard'
-    if (navigator.share) { await navigator.share({ title: 'My Flavor Champion', text, url: window.location.href }); result = 'web-share' }
-    else await navigator.clipboard.writeText(text)
+    if (navigator.share) {
+      try { await navigator.share({ title: 'My Flavor Champion', text, url: window.location.href }); result = 'web-share' }
+      catch (cause) { if (cause instanceof DOMException && cause.name === 'AbortError') return; await copyText(text) }
+    } else await copyText(text)
     setShared(true)
     await track('flavor_cup_result_shared', { championId: champion.id, shareSurface: 'result-card', result })
   }
@@ -216,17 +220,33 @@ export function FlavorCup({ challenge, onVote, onComplete, track = async () => u
   const finish = () => onComplete({ championId: tournament.championId, matchCount: tournament.matches.length, completionMs: Date.now() - missionStartedAt.current })
 
   return <MissionShell eyebrow="Flavor Referee" title="Flavor Cup — Crown Your Crunch">
-    <p className="text-crunch-ink/70">เลือกหนึ่งรสในแต่ละคู่ ผู้ชนะจะผ่านเข้ารอบจนเหลือแชมป์เพียงหนึ่งเดียว ระบบบันทึกทุกคำตอบทันที</p>
-    {!tournament.completed && current && <section className="mt-5 rounded-3xl bg-crunch-cream p-4" aria-label="คู่แข่งขันปัจจุบัน"><p className="text-center text-sm font-black text-crunch-red">รอบ {current.round} · คู่ที่ {current.index + 1}</p><div className="mt-3 grid grid-cols-[1fr_auto_1fr] items-stretch gap-2"><FlavorChoice value={flavor(current.leftId)} side="ซ้าย" disabled={busy} onChoose={choose} /><span className="self-center font-black text-crunch-red">VS</span><FlavorChoice value={flavor(current.rightId)} side="ขวา" disabled={busy} onChoose={choose} /></div></section>}
-    <section className="mt-5" aria-label="สายการแข่งขัน"><h2 className="text-xl font-black">Tournament bracket</h2><div className="mt-3 grid gap-3 sm:grid-cols-3">{Array.from({ length: Math.ceil(Math.log2(tournament.bracketSize)) }, (_, offset) => offset + 1).map((round) => <div key={round} className="rounded-2xl bg-crunch-cream p-3"><h3 className="font-black">รอบ {round}</h3>{tournament.matches.filter((match) => match.round === round).map((match) => <div key={match.id} className="mt-2 rounded-xl bg-white p-2 text-sm"><p className={match.winnerId === match.leftId ? 'font-black text-crunch-red' : ''}>{flavor(match.leftId)?.name ?? 'รอผล'}</p><p className={match.winnerId === match.rightId ? 'font-black text-crunch-red' : ''}>{flavor(match.rightId)?.name ?? 'รอผล'}</p></div>)}</div>)}</div></section>
-    {tournament.completed && champion && <section className="mt-5 overflow-hidden rounded-3xl border-4 bg-crunch-ink p-5 text-center text-white" style={{ borderColor: shareCard.accent }} aria-label="My Flavor Champion result card"><p className="text-sm font-black uppercase tracking-[.18em]" style={{ color: shareCard.accent }}>{shareCard.title}</p><img src={champion.image} alt="ผลิตภัณฑ์ตัวอย่าง" className="mx-auto mt-3 h-28" /><h2 className="mt-2 text-3xl font-black">{champion.name}</h2><p>{champion.description}</p><p className="mt-3 text-sm text-white/70">เส้นทางสู่แชมป์: {tournament.matches.filter((match) => match.winnerId === champion.id).map((match) => `รอบ ${match.round}`).join(' → ')}</p><button onClick={() => void share()} className="mt-4 min-h-12 rounded-2xl px-5 font-black text-crunch-ink" style={{ backgroundColor: shareCard.accent }}>{shared ? 'แชร์ผลแล้ว' : 'แชร์การ์ดแชมป์'}</button></section>}
+    {!tournament.completed && <><div className="rounded-2xl bg-crunch-cream p-4"><div className="flex items-end justify-between gap-3"><div><p className="text-sm font-black text-crunch-red">เส้นทางสู่แชมป์</p><p className="font-bold">เลือกไปแล้ว {tournament.selectionCount} จาก {totalSelections} คู่</p></div><strong className="text-2xl">{progress}%</strong></div><div className="mt-3 h-3 overflow-hidden rounded-full bg-white"><div className="h-full rounded-full bg-crunch-red transition-[width] duration-500" style={{ width: `${progress}%` }} /></div></div><p className="mt-4 text-center text-crunch-ink/65">เลือกรสที่ใช่ในแต่ละคู่ ระบบบันทึกคำตอบให้อัตโนมัติ</p></>}
+    {!tournament.completed && current && <section key={current.id} className="match-enter relative mt-5 overflow-hidden rounded-[2rem] bg-gradient-to-br from-crunch-cream to-white p-4 shadow-inner sm:p-6" aria-label="คู่แข่งขันปัจจุบัน"><p className="text-center text-sm font-black text-crunch-red">รอบ {current.round} · คู่ที่ {tournament.selectionCount + 1} จาก {totalSelections}</p><div className="mt-4 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-stretch gap-2 sm:gap-4"><FlavorChoice value={flavor(current.leftId)} side="ซ้าย" disabled={busy} onChoose={choose} /><span className="shine self-center rounded-full bg-crunch-ink px-2.5 py-3 text-sm font-black text-crunch-yellow shadow-lg sm:px-3 sm:text-base">VS</span><FlavorChoice value={flavor(current.rightId)} side="ขวา" disabled={busy} onChoose={choose} /></div>{busy && <div className="absolute inset-0 grid place-items-center bg-white/70 backdrop-blur-sm"><span className="rounded-full bg-crunch-ink px-5 py-3 font-black text-white">กำลังส่งผู้ชนะเข้ารอบ…</span></div>}</section>}
+    {tournament.completed && champion && <section className="toast-pop relative mt-2 overflow-hidden rounded-[2rem] border-4 bg-crunch-ink p-6 text-center text-white" style={{ borderColor: shareCard.accent }} aria-label="My Flavor Champion result card"><div aria-hidden className="absolute inset-0 opacity-20"><span className="absolute left-5 top-5 text-4xl">✦</span><span className="absolute right-6 top-16 text-2xl">✦</span><span className="absolute bottom-8 left-12 text-2xl">✦</span></div><p className="relative text-sm font-black uppercase tracking-[.18em]" style={{ color: shareCard.accent }}>{shareCard.title}</p><div className="relative mx-auto mt-4 aspect-square w-40 overflow-hidden rounded-[2rem] border-4 border-white/30 bg-white"><img src={champion.image} alt="ผลิตภัณฑ์ตัวอย่าง" className="h-full w-full object-cover" /></div><h2 className="relative mt-3 text-4xl font-black">{champion.name}</h2><p className="relative text-white/75">{champion.description}</p><p className="relative mt-3 text-sm text-white/70">ชนะต่อเนื่อง {tournament.matches.filter((match) => match.winnerId === champion.id).length} รอบจนคว้ามงกุฎ</p><button onClick={() => void share()} className="relative mt-5 min-h-12 rounded-2xl px-6 font-black text-crunch-ink" style={{ backgroundColor: shareCard.accent }}>{shared ? 'แชร์ผลแล้ว ✓' : 'แชร์แชมป์ของฉัน'}</button></section>}
+    {tournament.completed && <TournamentBracket tournament={tournament} flavor={flavor} />}
     {tournament.completed && <button onClick={() => void finish()} className="mt-4 min-h-14 w-full rounded-2xl bg-crunch-red font-black text-white">ยืนยันแชมป์และจบภารกิจ</button>}
   </MissionShell>
 }
 
 function FlavorChoice({ value, side, disabled, onChoose }: { value?: CupFlavor; side: string; disabled: boolean; onChoose: (id: string) => Promise<void> }) {
   if (!value) return <div />
-  return <button disabled={disabled} onClick={() => void onChoose(value.id)} aria-label={`เลือก ${value.name}`} className="min-w-0 rounded-2xl p-3 text-center font-black text-white shadow-sm disabled:opacity-50" style={{ backgroundColor: value.color }}><small className="block opacity-80">{side}</small><img src={value.image} alt="" className="mx-auto my-2 h-24" /><span className="block break-words">{value.name}</span><small className="mt-1 block font-normal">{value.description}</small></button>
+  return <button disabled={disabled} onClick={() => void onChoose(value.id)} aria-label={`เลือก ${value.name}`} className="group min-w-0 overflow-hidden rounded-3xl border-4 border-white p-2 text-center font-black text-white shadow-lg disabled:opacity-50 sm:p-3" style={{ backgroundColor: value.color }}><small className="block opacity-80">{side}</small><div className="mx-auto my-2 aspect-square w-full max-w-36 overflow-hidden rounded-2xl bg-white/90 shadow-inner"><img src={value.image} alt="" className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" /></div><span className="block break-words text-sm leading-tight sm:text-base">{value.name}</span><small className="mt-1 hidden font-normal opacity-85 sm:block">{value.description}</small><span className="mt-2 block rounded-full bg-white/20 px-2 py-1 text-xs">เลือกรสนี้</span></button>
+}
+
+function TournamentBracket({ tournament, flavor }: { tournament: CupTournament; flavor: (id?: string) => CupFlavor | undefined }) {
+  const rounds = Math.ceil(Math.log2(tournament.bracketSize))
+  const bracketHeight = Math.max(480, tournament.bracketSize * 58)
+  const roundTitle = (round: number) => {
+    const remaining = tournament.bracketSize / 2 ** (round - 1)
+    if (remaining === 4) return 'รอบรองชนะเลิศ'
+    if (remaining === 2) return 'รอบชิงชนะเลิศ'
+    return `รอบ ${remaining} รส`
+  }
+  return <section className="mt-7 rounded-[2rem] bg-crunch-cream p-4 sm:p-5" aria-label="สายการแข่งขัน"><div className="flex items-end justify-between gap-3"><div><p className="text-sm font-black text-crunch-red">เส้นทางการแข่งขันทั้งหมด</p><h2 className="text-2xl font-black">Tournament bracket</h2></div><span className="rounded-full bg-white px-3 py-2 text-xs font-bold">เลื่อนดูด้านข้าง →</span></div><div className="bracket-scroll mt-4 overflow-x-auto pb-4"><div className="flex min-w-max gap-6 rounded-3xl bg-white/65 p-4" style={{ height: `${bracketHeight + 64}px` }}>{Array.from({ length: rounds }, (_, offset) => offset + 1).map((round) => <div key={round} className="bracket-column flex w-48 shrink-0 flex-col"><h3 className="h-12 text-center text-sm font-black text-crunch-red">{roundTitle(round)}</h3><div className="grid min-h-0 flex-1" style={{ gridTemplateRows: `repeat(${tournament.bracketSize}, minmax(0, 1fr))` }}>{tournament.matches.filter((match) => match.round === round).map((match) => { const span = 2 ** round; const start = match.index * span + 1; const left = flavor(match.leftId); const right = flavor(match.rightId); return <article key={match.id} className="bracket-match self-center rounded-2xl border border-crunch-ink/10 bg-white p-2 shadow-sm" style={{ gridRow: `${start} / span ${span}` }}><BracketFlavor value={left} winner={match.winnerId === match.leftId} /><div className="my-1 h-px bg-crunch-ink/10" /><BracketFlavor value={right} winner={match.winnerId === match.rightId} /></article> })}</div></div>)}</div></div><p className="mt-2 text-center text-xs text-crunch-ink/50">ภาพอ้างอิงโดย <a className="underline" href="https://commons.wikimedia.org/wiki/User:Famartin" target="_blank" rel="noreferrer">Famartin</a> / CC BY-SA 4.0 · รายการรสชาติปรับได้จากการตั้งค่าแคมเปญ</p></section>
+}
+
+function BracketFlavor({ value, winner }: { value?: CupFlavor; winner: boolean }) {
+  return <div className={`flex min-h-9 items-center gap-2 rounded-xl px-2 py-1 ${winner ? 'bg-crunch-yellow text-crunch-ink' : 'text-crunch-ink/55'}`}><div className="h-7 w-7 shrink-0 overflow-hidden rounded-lg bg-crunch-cream">{value && <img src={value.image} alt="" className="h-full w-full object-cover" />}</div><span className={`min-w-0 flex-1 truncate text-xs ${winner ? 'font-black' : 'font-semibold'}`}>{value?.name ?? 'รอผล'}</span>{winner && <span aria-label="ผู้ชนะ">✓</span>}</div>
 }
 
 function Choice({ label, value, onChange, options, labels = {}, disabled = false }: { label: string; value: string; onChange: (value: string) => void; options: string[]; labels?: Record<string, string>; disabled?: boolean }) {

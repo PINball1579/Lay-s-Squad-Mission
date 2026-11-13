@@ -41,7 +41,7 @@ describe('replacement mission interactions', () => {
     fireEvent.load(imageA)
     expect(track).not.toHaveBeenCalledWith('crunch_hunt_started', expect.anything())
     fireEvent.load(imageB)
-    expect(await screen.findByText(/เวลา 30 วินาที/)).toBeInTheDocument()
+    expect(await screen.findByText('30 วิ')).toBeInTheDocument()
     const shelf = screen.getByRole('button', { name: 'ภาพชั้นวาง A' })
     vi.spyOn(shelf, 'getBoundingClientRect').mockReturnValue({ left: 10, top: 20, width: 200, height: 100, right: 210, bottom: 120, x: 10, y: 20, toJSON: () => ({}) })
     fireEvent.click(shelf, { clientX: 110, clientY: 70 })
@@ -65,6 +65,7 @@ describe('replacement mission interactions', () => {
     const next = { ...cupTournament, matches: [{ ...cupTournament.matches[0], winnerId: 'a', selectedSide: 'left' }, cupTournament.matches[1], { ...cupTournament.matches[2], leftId: 'a' }], currentMatchId: 'r1m2', selectionCount: 1 }
     const onVote = vi.fn().mockResolvedValue({ attempt: { id: 'attempt', squadId: 'squad', role: 'crunch_creator', challenge: { tournament: next }, status: 'started', startedAt: '', expiresAt: '' }, matchId: 'r1m1', winnerId: 'a', leftFlavor: 'a', rightFlavor: 'b', selectedSide: 'left', round: 1, created: true } as FlavorCupVoteResult)
     render(<FlavorCup challenge={{ tournament: cupTournament }} onVote={onVote} onComplete={vi.fn()} />)
+    expect(screen.queryByRole('region', { name: 'สายการแข่งขัน' })).not.toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'เลือก A' }))
     expect(onVote).toHaveBeenCalledWith('r1m1', 'a', expect.any(Number))
     expect(await screen.findByRole('button', { name: 'เลือก C' })).toBeInTheDocument()
@@ -75,6 +76,7 @@ describe('replacement mission interactions', () => {
     const finished = { ...cupTournament, matches: cupTournament.matches.map((match) => ({ ...match, leftId: match.leftId || 'a', rightId: match.rightId || 'c', winnerId: 'a' })), currentMatchId: '', championId: 'a', completed: true, selectionCount: 3 }
     render(<FlavorCup challenge={{ tournament: finished }} onVote={vi.fn()} onComplete={complete} />)
     expect(screen.getByRole('region', { name: 'My Flavor Champion result card' })).toHaveTextContent('A')
+    expect(screen.getByRole('region', { name: 'สายการแข่งขัน' })).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: /ยืนยันแชมป์และจบภารกิจ/ }))
     expect(complete).toHaveBeenCalledWith(expect.objectContaining({ championId: 'a', matchCount: 3 }))
   })

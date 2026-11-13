@@ -67,7 +67,7 @@ func (g *Game) Close() error { return g.db.Close() }
 
 func (g *Game) Health(ctx context.Context) error {
 	var applied bool
-	if err := g.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE version='0011_replacement_missions.up.sql')`).Scan(&applied); err != nil {
+	if err := g.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE version='0012_flavor_cup_sixteen.up.sql')`).Scan(&applied); err != nil {
 		return err
 	}
 	if !applied {

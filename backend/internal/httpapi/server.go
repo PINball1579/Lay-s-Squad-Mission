@@ -195,7 +195,7 @@ func (s *Server) campaign(w http.ResponseWriter, _ *http.Request) {
 		"id": "lays-crunch-squad", "name": "Lay's Crunch Squad",
 		"tagline": "รวมแก๊ง 4 คน พิชิต 4 ภารกิจ แล้วเปิด Crunch Vault", "squadSize": 4,
 		"roles":    domain.Roles,
-		"flavors":  []string{"Classic", "Bar-B-Q", "Nori Seaweed", "Sour Cream & Onion", "Hot & Spicy", "Cheese", "Truffle", "Zesty Lime"},
+		"flavors":  []string{"Classic", "Bar-B-Q", "Nori Seaweed", "Sour Cream & Onion", "Hot & Spicy", "Cheese", "Truffle", "Zesty Lime", "Salt & Pepper", "Tom Yum", "Mala", "Sweet Basil", "Roasted Chicken", "Grilled Shrimp", "Pizza", "Honey Butter"},
 		"missions": []string{"Crunch Hunt", "Flavor Cup", "Snack Detective", "QR Runner"},
 		"termsUrl": "/docs/placeholder-terms", "privacyUrl": "/docs/placeholder-privacy",
 		"brand": map[string]string{"primary": "#ffd928", "accent": "#e44532", "assetStatus": "campaign-ready"},

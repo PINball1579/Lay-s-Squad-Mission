@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { api, ApiError } from './lib/api'
 import { lineAdapter, shareOrCopy } from './lib/liff'
 import { MissionRunner } from './components/Missions'
-import { roles, type Dashboard, type Invitation, type MissionAttempt, type Role, type Squad, type User } from './types'
+import { roles, type Dashboard, type MissionAttempt, type Role, type Squad, type User } from './types'
 
 type Screen = 'loading' | 'intro' | 'consent' | 'lobby' | 'squad' | 'mission' | 'error'
 
@@ -38,7 +38,6 @@ function PlayerApp() {
   const [screen, setScreen] = useState<Screen>('loading')
   const [user, setUser] = useState<User | null>(null)
   const [squad, setSquad] = useState<Squad | null>(null)
-  const [invitation, setInvitation] = useState<Invitation | null>(null)
   const [shareNotice, setShareNotice] = useState('')
   const [missionRole, setMissionRole] = useState<Role | null>(null)
   const [missionAttempt, setMissionAttempt] = useState<MissionAttempt | null>(null)
@@ -118,19 +117,19 @@ function PlayerApp() {
   if (screen === 'intro') return <Intro invited={Boolean(inviteToken)} onMock={authenticateMock} onLine={authenticateLine} />
   if (!user) return <Loading invited={Boolean(inviteToken)} />
   if (screen === 'consent') return <ConsentScreen invited={Boolean(inviteToken)} onContinue={acceptConsent} />
-  if (screen === 'lobby') return <Lobby user={user} onCreate={async (name) => { try { const result = await api.createSquad(name); setSquad(result.squad); setInvitation(result.invitation); setScreen('squad') } catch (cause) { showError(cause) } }} />
+  if (screen === 'lobby') return <Lobby user={user} onCreate={async (name) => { try { const result = await api.createSquad(name); setSquad(result.squad); setScreen('squad') } catch (cause) { showError(cause) } }} />
   if (screen === 'mission' && squad && missionRole && missionAttempt) return <MissionRunner role={missionRole} challenge={missionAttempt.challenge} expiresAt={missionAttempt.expiresAt} errorMessage={missionError} line={lineAdapter} validateQR={(token) => api.validateQR(token, missionAttempt.id)} onFlavorVote={(matchId, winnerId, decisionMs) => api.flavorCupVote(squad.id, missionAttempt.id, matchId, winnerId, decisionMs)} track={(name, properties) => api.event(name, { squadId: squad.id, properties }).then(() => undefined).catch(() => undefined)} onBack={() => { setMissionAttempt(null); setMissionError(''); setScreen('squad') }} onComplete={async (properties) => { try { const result = await api.completeMission(squad.id, missionRole, missionAttempt.id, properties); setSquad(result.squad); setMissionAttempt(null); setMissionError(''); setScreen('squad') } catch (cause) { if (cause instanceof ApiError && cause.code === 'attempt_invalid') { setMissionAttempt(null); setMissionError(''); setMissionNotice('รอบภารกิจหมดอายุหรือถูกแทนที่ กดเริ่มใหม่ได้เลย'); setScreen('squad') } else if (cause instanceof ApiError && cause.code === 'mission_not_complete') { setMissionError('คำตอบยังไม่ครบตามโจทย์ ลองตรวจอีกครั้ง') } else showError(cause) } }} />
-  if (squad) return <SquadScreen user={user} squad={squad} invitation={invitation} shareNotice={shareNotice} startingRole={startingRole} missionNotice={missionNotice} onRole={async (role) => { try { setSquad(await api.claimRole(squad.id, role)) } catch (cause) { if (cause instanceof ApiError && cause.code === 'role_taken') setMissionNotice(errorMessages.role_taken); else showError(cause) } }} onMission={async (role) => { if (startingRole) return; setStartingRole(role); setMissionNotice(''); try { const attempt = await api.startMission(squad.id, role); setMissionRole(role); setMissionAttempt(attempt); setScreen('mission') } catch (cause) { showError(cause) } finally { setStartingRole(null) } }} onInvite={async () => { try { setShareNotice(''); setInvitation(await api.invite(squad.id)) } catch (cause) { showError(cause) } }} onShare={async (next) => { try { const url = `${window.location.origin}${window.location.pathname}?invite=${encodeURIComponent(next.token)}`; await api.event('share_initiated', { squadId: squad.id }); const result = await shareOrCopy(lineAdapter, { url, squadName: squad.name, expiresLabel: `ลิงก์หมดอายุ ${new Date(next.expiresAt).toLocaleString('th-TH')}` }); setShareNotice(result === 'line' ? 'ส่งการ์ดเชิญแล้ว' : 'คัดลอกลิงก์เชิญแล้ว'); await api.event('share_completed', { squadId: squad.id, properties: { result } }) } catch (cause) { showError(cause) } }} onRedeem={async () => { try { setSquad(await api.redeem(squad.id)) } catch (cause) { showError(cause) } }} />
+  if (squad) return <SquadScreen user={user} squad={squad} shareNotice={shareNotice} startingRole={startingRole} missionNotice={missionNotice} onRole={async (role) => { try { setSquad(await api.claimRole(squad.id, role)) } catch (cause) { if (cause instanceof ApiError && cause.code === 'role_taken') setMissionNotice(errorMessages.role_taken); else showError(cause) } }} onMission={async (role) => { if (startingRole) return; setStartingRole(role); setMissionNotice(''); try { const attempt = await api.startMission(squad.id, role); setMissionRole(role); setMissionAttempt(attempt); setScreen('mission') } catch (cause) { showError(cause) } finally { setStartingRole(null) } }} onInvite={async () => { try { setShareNotice(''); const next = await api.invite(squad.id); const url = `${window.location.origin}${window.location.pathname}?invite=${encodeURIComponent(next.token)}`; await api.event('share_initiated', { squadId: squad.id }); const result = await shareOrCopy(lineAdapter, { url, squadName: squad.name, expiresLabel: `ลิงก์หมดอายุ ${new Date(next.expiresAt).toLocaleString('th-TH')}` }); setShareNotice(result === 'line' ? 'ส่งคำเชิญแล้ว!' : 'คัดลอกแล้ว!'); window.setTimeout(() => setShareNotice(''), 2600); await api.event('share_completed', { squadId: squad.id, properties: { result } }) } catch (cause) { showError(cause) } }} onRedeem={async () => { try { setSquad(await api.redeem(squad.id)) } catch (cause) { showError(cause) } }} />
   return null
 }
 
 function Loading({ invited }: { invited: boolean }) {
-  return <main className="grid min-h-screen place-items-center p-6"><div className="text-center"><LaysLogo className="mx-auto w-32" /><p className="mt-5 text-xl font-black">{invited ? 'กำลังพาคุณเข้าทีม…' : 'กำลังเตรียมความครันช์…'}</p></div></main>
+  return <main className="grid min-h-screen place-items-center p-6"><div className="screen-enter text-center"><div className="logo-pulse mx-auto grid h-40 w-40 place-items-center rounded-full bg-white/55"><LaysLogo className="w-32" /></div><p className="mt-5 text-xl font-black">{invited ? 'กำลังพาคุณเข้าทีม…' : 'กำลังเตรียมความครันช์…'}</p><div className="mx-auto mt-4 flex w-fit gap-2" aria-hidden>{[0,1,2].map((item) => <span key={item} className="loading-dot h-2.5 w-2.5 rounded-full bg-crunch-red" style={{ animationDelay: `${item * 140}ms` }} />)}</div></div></main>
 }
 
 function Intro({ invited, onMock, onLine }: { invited: boolean; onMock: (id: string) => void; onLine: () => void }) {
   const mock = import.meta.env.VITE_MOCK_LIFF !== 'false'
-  return <main className="relative mx-auto min-h-screen max-w-lg overflow-hidden px-5 py-6">
+  return <main className="screen-enter relative mx-auto min-h-screen max-w-lg overflow-hidden px-5 py-6">
     <FloatingChips />
     <div className="relative overflow-hidden rounded-[2.5rem] bg-white/95 shadow-pop">
       <div className="relative h-52 overflow-hidden"><img src="/brand/lays-classic.jpg" alt="มันฝรั่งทอดกรอบ" className="h-full w-full object-cover" /><div className="absolute inset-0 bg-gradient-to-t from-black/45 to-transparent" /><LaysLogo className="absolute bottom-3 left-5 w-28 drop-shadow-lg" /></div>
@@ -138,7 +137,7 @@ function Intro({ invited, onMock, onLine }: { invited: boolean; onMock: (id: str
         <p className="font-black uppercase tracking-[.2em] text-crunch-red">LAY'S CRUNCH SQUAD</p>
         <h1 className="mt-2 text-4xl font-black leading-tight text-crunch-ink">{invited ? 'เพื่อนชวนคุณเข้าทีม!' : 'รวมทีมให้ครบ รับความครันช์ให้เต็มคำ'}</h1>
         <p className="mt-3 text-lg text-crunch-ink/70">4 คน · 4 ภารกิจ · ปลดล็อกรางวัลพิเศษไปด้วยกัน</p>
-        {mock ? <div className="mt-6"><p className="mb-3 font-black">{invited ? 'เลือกชื่อเพื่อเข้าร่วมทีม' : 'เลือกผู้เล่น'}</p><div className="grid grid-cols-2 gap-3">{['mali','nok','beam','ploy'].map((id) => <button key={id} onClick={() => onMock(id)} className="min-h-14 rounded-2xl bg-crunch-red px-4 font-black capitalize text-white shadow-sm">{id}</button>)}</div><p className="mt-3 text-center text-xs text-crunch-ink/50">โหมดทดสอบภายในเครื่อง</p></div> : <button onClick={onLine} className="mt-6 min-h-14 w-full rounded-2xl bg-[#06c755] font-black text-white">เข้าร่วมด้วย LINE</button>}
+          {mock ? <div className="mt-6"><p className="mb-3 font-black">{invited ? 'เลือกชื่อเพื่อเข้าร่วมทีม' : 'เลือกผู้เล่น'}</p><div className="grid grid-cols-2 gap-3">{['mali','nok','beam','ploy'].map((id, index) => <button key={id} onClick={() => onMock(id)} className="button-pop min-h-14 rounded-2xl bg-crunch-red px-4 font-black capitalize text-white shadow-sm" style={{ animationDelay: `${index * 70}ms` }}>{id}</button>)}</div><p className="mt-3 text-center text-xs text-crunch-ink/50">โหมดทดสอบภายในเครื่อง</p></div> : <button onClick={onLine} className="button-pop mt-6 min-h-14 w-full rounded-2xl bg-[#06c755] font-black text-white">เข้าร่วมด้วย LINE</button>}
       </div>
     </div>
     <PhotoCredit />
@@ -149,7 +148,7 @@ function ConsentScreen({ invited, onContinue }: { invited: boolean; onContinue: 
   const [required, setRequired] = useState(false)
   const [analytics, setAnalytics] = useState(false)
   const [busy, setBusy] = useState(false)
-  return <main className="mx-auto min-h-screen max-w-lg px-5 py-8"><section className="rounded-[2rem] bg-white p-6 shadow-pop">
+  return <main className="screen-enter mx-auto min-h-screen max-w-lg px-5 py-8"><section className="interactive-card rounded-[2rem] bg-white p-6 shadow-pop">
     <LaysLogo className="w-24" /><p className="mt-4 font-black uppercase tracking-[.18em] text-crunch-red">ความเป็นส่วนตัว</p><h1 className="mt-2 text-4xl font-black">ก่อนเริ่มความครันช์</h1>
     <p className="mt-3 text-crunch-ink/70">เราใช้ข้อมูลเท่าที่จำเป็นเพื่อจัดเก็บสมาชิก ความคืบหน้า และสิทธิ์รางวัลของทีม</p>
     <label className="mt-6 flex gap-3 rounded-2xl border-2 border-crunch-ink/10 p-4"><input aria-label="ยอมรับการใช้ข้อมูลที่จำเป็น" type="checkbox" checked={required} onChange={(event) => setRequired(event.target.checked)} /><span><strong>ยอมรับการใช้ข้อมูลที่จำเป็น</strong><small className="block">บัญชีแบบนามแฝง สถานะทีม ความปลอดภัย และรางวัล</small></span></label>
@@ -161,17 +160,18 @@ function ConsentScreen({ invited, onContinue }: { invited: boolean; onContinue: 
 function Lobby({ user, onCreate }: { user: User; onCreate: (name: string) => Promise<void> }) {
   const [name, setName] = useState(`ทีมครันช์ของ ${user.displayName}`)
   const [busy, setBusy] = useState(false)
-  return <main className="mx-auto min-h-screen max-w-lg px-5 py-7"><header className="flex items-center justify-between"><div><p className="text-sm font-bold">พร้อมแล้วนะ {user.displayName}</p><h1 className="text-3xl font-black">ตั้งทีมของคุณ</h1></div><LaysLogo className="w-20" /></header>
-    <section className="mt-7 rounded-[2rem] bg-white p-5 shadow-pop"><h2 className="text-2xl font-black">ตั้งชื่อทีมให้จำง่าย</h2><p className="mt-2 text-crunch-ink/65">หลังจากสร้างทีม คุณจะได้การ์ดเชิญไปชวนเพื่อน</p><label className="mt-4 block font-bold">ชื่อทีม<input value={name} maxLength={80} onChange={(event) => setName(event.target.value)} className="mt-1 min-h-12 w-full rounded-xl border-2 border-crunch-ink/20 px-3" /></label><button disabled={!name.trim() || busy} onClick={async () => { setBusy(true); try { await onCreate(name) } finally { setBusy(false) } }} className="mt-4 min-h-14 w-full rounded-2xl bg-crunch-red font-black text-white disabled:opacity-40">{busy ? 'กำลังสร้างทีม…' : 'สร้างทีม'}</button></section>
+  return <main className="screen-enter mx-auto min-h-screen max-w-lg px-5 py-7"><header className="flex items-center justify-between"><div><p className="text-sm font-bold">พร้อมแล้วนะ {user.displayName}</p><h1 className="text-3xl font-black">ตั้งทีมของคุณ</h1></div><LaysLogo className="w-20" /></header>
+    <section className="interactive-card mt-7 rounded-[2rem] bg-white p-5 shadow-pop"><h2 className="text-2xl font-black">ตั้งชื่อทีมให้จำง่าย</h2><p className="mt-2 text-crunch-ink/65">สร้างทีมแล้วกดชวนเพื่อน ระบบจะส่งหรือคัดลอกลิงก์ให้ทันที</p><label className="mt-4 block font-bold">ชื่อทีม<input value={name} maxLength={80} onChange={(event) => setName(event.target.value)} className="mt-1 min-h-12 w-full rounded-xl border-2 border-crunch-ink/20 px-3" /></label><button disabled={!name.trim() || busy} onClick={async () => { setBusy(true); try { await onCreate(name) } finally { setBusy(false) } }} className="mt-4 min-h-14 w-full rounded-2xl bg-crunch-red font-black text-white disabled:opacity-40">{busy ? 'กำลังสร้างทีม…' : 'สร้างทีม'}</button></section>
   </main>
 }
 
-function SquadScreen({ user, squad, invitation, shareNotice, startingRole, missionNotice, onRole, onMission, onInvite, onShare, onRedeem }: { user: User; squad: Squad; invitation: Invitation | null; shareNotice: string; startingRole: Role | null; missionNotice: string; onRole: (role: Role) => Promise<void>; onMission: (role: Role) => Promise<void>; onInvite: () => Promise<void>; onShare: (invitation: Invitation) => Promise<void>; onRedeem: () => Promise<void> }) {
+function SquadScreen({ user, squad, shareNotice, startingRole, missionNotice, onRole, onMission, onInvite, onRedeem }: { user: User; squad: Squad; shareNotice: string; startingRole: Role | null; missionNotice: string; onRole: (role: Role) => Promise<void>; onMission: (role: Role) => Promise<void>; onInvite: () => Promise<void>; onRedeem: () => Promise<void> }) {
   const current = squad.members.find((member) => member.userId === user.id)
   const claimed = new Set(squad.members.map((member) => member.role))
   const complete = squad.members.filter((member) => member.completed).length
   const progress = complete * 25
-  return <main className="mx-auto min-h-screen max-w-lg px-5 py-7">
+  const [inviteBusy, setInviteBusy] = useState(false)
+  return <main className="screen-enter mx-auto min-h-screen max-w-lg px-5 py-7">
     <header className="flex items-center justify-between gap-3"><div><p className="font-bold text-crunch-red">{squad.name}</p><h1 className="text-3xl font-black">{squad.rewardUnlocked ? 'ปลดล็อก Crunch Vault แล้ว!' : `ความครันช์ ${progress}%`}</h1></div><LaysLogo className="w-20 shrink-0" /></header>
     <BagProgress progress={progress} />
     {!current?.role && <section className="mt-5 rounded-[2rem] bg-crunch-ink p-5 text-white"><p className="text-xs font-black uppercase tracking-[.18em] text-crunch-yellow">ขั้นตอนต่อไป</p><h2 className="mt-1 text-2xl font-black">เลือกและล็อกภารกิจของคุณ</h2><p className="mt-2 text-white/70">หนึ่งคนรับหนึ่งภารกิจ เลือกแล้วเปลี่ยนไม่ได้</p></section>}
@@ -180,19 +180,11 @@ function SquadScreen({ user, squad, invitation, shareNotice, startingRole, missi
     <section className="mt-5 grid gap-3" aria-label="ภารกิจของทีม">{roles.map((role) => {
       const member = squad.members.find((item) => item.role === role.code)
       const mine = current?.role === role.code
-      return <article key={role.code} className={`rounded-3xl bg-white p-4 shadow-pop ${mine ? 'ring-4 ring-crunch-red' : ''}`}><div className="flex gap-3"><span className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-crunch-yellow text-2xl font-black" aria-hidden>{role.icon}</span><div className="min-w-0 flex-1"><h2 className="text-xl font-black">{role.title}</h2><p className="text-sm text-crunch-ink/65">{member ? `${member.displayName} · ${member.completed ? 'สำเร็จแล้ว' : 'กำลังลุย'}` : role.description}</p></div></div>{mine && !member?.completed && <button disabled={startingRole !== null} onClick={() => onMission(role.code)} className="mt-3 min-h-12 w-full rounded-2xl bg-crunch-red font-black text-white disabled:opacity-60">{startingRole === role.code ? 'กำลังเตรียมโจทย์…' : 'เริ่มภารกิจของฉัน'}</button>}{!current?.role && !claimed.has(role.code) && <button onClick={() => onRole(role.code)} className="mt-3 min-h-12 w-full rounded-2xl bg-crunch-ink font-black text-white">ล็อกภารกิจนี้</button>}</article>
+      return <article key={role.code} className={`interactive-card mission-card rounded-3xl bg-white p-4 shadow-pop ${mine ? 'ring-4 ring-crunch-red' : ''}`} style={{ animationDelay: `${roles.indexOf(role) * 80}ms` }}><div className="flex gap-3"><span className="role-icon grid h-12 w-12 shrink-0 place-items-center rounded-full bg-crunch-yellow text-2xl font-black" aria-hidden>{member?.completed ? '✓' : role.icon}</span><div className="min-w-0 flex-1"><h2 className="text-xl font-black">{role.title}</h2><p className="text-sm text-crunch-ink/65">{member ? `${member.displayName} · ${member.completed ? 'สำเร็จแล้ว' : 'กำลังลุย'}` : role.description}</p></div></div>{mine && !member?.completed && <button disabled={startingRole !== null} onClick={() => onMission(role.code)} className="mt-3 min-h-12 w-full rounded-2xl bg-crunch-red font-black text-white disabled:opacity-60">{startingRole === role.code ? 'กำลังเตรียมโจทย์…' : 'เริ่มภารกิจของฉัน'}</button>}{!current?.role && !claimed.has(role.code) && <button onClick={() => onRole(role.code)} className="mt-3 min-h-12 w-full rounded-2xl bg-crunch-ink font-black text-white">ล็อกภารกิจนี้</button>}</article>
     })}</section>
-    {!squad.rewardUnlocked && squad.members.length < 4 && <button onClick={onInvite} className="mt-5 min-h-14 w-full rounded-2xl bg-crunch-yellow font-black text-crunch-ink shadow-pop">สร้างการ์ดเชิญเพื่อน</button>}
-    {invitation && <InviteCard squad={squad} invitation={invitation} notice={shareNotice} onShare={() => onShare(invitation)} />}
+    {!squad.rewardUnlocked && squad.members.length < 4 && <button disabled={inviteBusy} onClick={async () => { setInviteBusy(true); try { await onInvite() } finally { setInviteBusy(false) } }} className="invite-pulse mt-5 min-h-14 w-full rounded-2xl bg-crunch-yellow font-black text-crunch-ink shadow-pop disabled:opacity-60">{inviteBusy ? 'กำลังเตรียมลิงก์…' : 'ชวนเพื่อนเข้าทีม'}</button>}
+    {shareNotice && <div role="status" aria-live="polite" className="toast-pop fixed inset-x-4 bottom-6 z-50 mx-auto flex max-w-sm items-center justify-center gap-3 rounded-2xl bg-crunch-ink px-5 py-4 font-black text-white shadow-2xl"><span className="grid h-7 w-7 place-items-center rounded-full bg-green-500" aria-hidden>✓</span>{shareNotice}</div>}
   </main>
-}
-
-function InviteCard({ squad, invitation, notice, onShare }: { squad: Squad; invitation: Invitation; notice: string; onShare: () => void }) {
-  const remaining = Math.max(0, 4 - squad.members.length)
-  return <section className="mt-5 overflow-hidden rounded-[2rem] bg-white shadow-pop" aria-label="การ์ดเชิญเข้าร่วมทีม">
-    <div className="relative h-36 overflow-hidden"><img src="/brand/lays-classic.jpg" alt="" className="h-full w-full object-cover" /><div className="absolute inset-0 bg-gradient-to-r from-black/60 to-black/10" /><LaysLogo className="absolute left-4 top-4 w-24" /><p className="absolute bottom-4 left-4 font-black text-white">LAY'S CRUNCH SQUAD</p></div>
-    <div className="p-5"><p className="text-sm font-black text-crunch-red">คำเชิญจากทีม</p><h2 className="mt-1 text-2xl font-black">{squad.name}</h2><p className="mt-2 text-crunch-ink/65">เหลือที่ว่างอีก {remaining} คน · กดลิงก์แล้วเข้าทีมได้ทันที</p><p className="mt-2 text-xs text-crunch-ink/50">หมดอายุ {new Date(invitation.expiresAt).toLocaleString('th-TH')}</p><button onClick={onShare} className="mt-4 min-h-14 w-full rounded-2xl bg-[#06c755] font-black text-white">ส่งการ์ดเชิญ / คัดลอกลิงก์</button>{notice && <p role="status" className="mt-3 text-center font-bold text-[#07883d]">{notice}</p>}</div>
-  </section>
 }
 
 function BagProgress({ progress }: { progress: number }) {

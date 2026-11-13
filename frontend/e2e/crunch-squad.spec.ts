@@ -39,6 +39,9 @@ test('four-player journey, race handling, consent, QR, reward, and dashboard', a
   const createBody = await (await created).json()
   const invite = createBody.invitation.token as string
   await expect(mali.getByRole('region', { name: 'ภารกิจของทีม' })).toBeVisible()
+  await mali.getByRole('button', { name: 'ชวนเพื่อนเข้าทีม' }).click()
+  await expect(mali.getByRole('status')).toContainText('คัดลอกแล้ว!')
+  await expect(mali.getByRole('region', { name: 'การ์ดเชิญเข้าร่วมทีม' })).toHaveCount(0)
 
   await login(nok, 'nok', invite, false)
   await login(beam, 'beam', invite)
@@ -65,27 +68,29 @@ test('four-player journey, race handling, consent, QR, reward, and dashboard', a
   await roleCard(flavorPage, 'Crunch Hunter').getByRole('button', { name: /เริ่มภารกิจของฉัน/i }).click()
   await expect(flavorPage.getByRole('heading', { name: /Crunch Hunt/ })).toBeVisible()
   const huntImage = flavorPage.getByRole('button', { name: 'ภาพชั้นวาง A' })
-  await expect(flavorPage.getByText(/เวลา 90 วินาที/)).toBeVisible()
+  await expect(flavorPage.getByText('90 วิ')).toBeVisible()
   const huntBox = await huntImage.boundingBox()
   if (!huntBox) throw new Error('Crunch Hunt image did not render')
   let foundCount = 0
   for (const [x, y] of [[.50,.13],[.19,.43],[.76,.43],[.35,.72],[.82,.73]]) {
     foundCount += 1
     await huntImage.click({ position: { x: huntBox.width * x, y: huntBox.height * y } })
-    await expect(flavorPage.getByText(`พบ ${foundCount}/5`)).toBeVisible()
+    await expect(flavorPage.getByText(`${foundCount}/5`, { exact: true })).toBeVisible()
   }
   await flavorPage.getByRole('button', { name: /ยืนยันผล Crunch Hunt/i }).click()
 
   await roleCard(creatorPage, 'Flavor Referee').getByRole('button', { name: /เริ่มภารกิจของฉัน/i }).click()
   await expect(creatorPage.getByRole('heading', { name: /Flavor Cup/ })).toBeVisible()
+  await expect(creatorPage.getByRole('region', { name: 'สายการแข่งขัน' })).toHaveCount(0)
   await creatorPage.getByRole('region', { name: 'คู่แข่งขันปัจจุบัน' }).getByRole('button').first().click()
   await creatorPage.reload()
   await expect(creatorPage.getByRole('region', { name: 'ภารกิจของทีม' })).toBeVisible()
   await roleCard(creatorPage, 'Flavor Referee').getByRole('button', { name: /เริ่มภารกิจของฉัน/i }).click()
-  for (let selection = 1; selection < 7; selection++) {
+  for (let selection = 1; selection < 15; selection++) {
     await creatorPage.getByRole('region', { name: 'คู่แข่งขันปัจจุบัน' }).getByRole('button').first().click()
   }
   await expect(creatorPage.getByRole('region', { name: 'My Flavor Champion result card' })).toBeVisible()
+  await expect(creatorPage.getByRole('region', { name: 'สายการแข่งขัน' })).toBeVisible()
   await creatorPage.getByRole('button', { name: /ยืนยันแชมป์และจบภารกิจ/i }).click()
 
   await roleCard(beam, 'นักสืบสายสแน็ก').getByRole('button', { name: /เริ่มภารกิจของฉัน/i }).click()
@@ -129,6 +134,6 @@ test('four-player journey, race handling, consent, QR, reward, and dashboard', a
 })
 
 function browserContextOptions() {
-  return { viewport: { width: 390, height: 844 }, deviceScaleFactor: 1, isMobile: true, hasTouch: true }
+  return { viewport: { width: 390, height: 844 }, deviceScaleFactor: 1, isMobile: true, hasTouch: true, permissions: ['clipboard-read', 'clipboard-write'] }
 }
 

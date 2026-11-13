@@ -73,7 +73,24 @@ export const lineAdapter: LineAdapter = import.meta.env.VITE_MOCK_LIFF === 'fals
 
 export async function shareOrCopy(adapter: LineAdapter, invite: ShareInvitation) {
   if (await adapter.share(invite)) return 'line'
-  await navigator.clipboard.writeText(invite.url)
+  await copyText(invite.url)
   return 'clipboard'
+}
+
+export async function copyText(value: string) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(value)
+    return
+  }
+  const field = document.createElement('textarea')
+  field.value = value
+  field.setAttribute('readonly', '')
+  field.style.position = 'fixed'
+  field.style.opacity = '0'
+  document.body.append(field)
+  field.select()
+  const copied = document.execCommand('copy')
+  field.remove()
+  if (!copied) throw new Error('Clipboard is unavailable')
 }
 

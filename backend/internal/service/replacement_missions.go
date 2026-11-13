@@ -87,7 +87,7 @@ func defaultCrunchHuntChallenge() map[string]any {
 }
 
 func newFlavorCupChallenge(config map[string]any) map[string]any {
-	defaults := flavorCupConfig{BracketSize: 8, Flavors: defaultFlavors(), PlacementMode: "random", ShareCard: map[string]any{"title": "My Flavor Champion", "accent": "#d93b2b", "message": "แชมป์รสชาติของฉันคือ {flavor} จาก Lay's Crunch Squad"}}
+	defaults := flavorCupConfig{BracketSize: 16, Flavors: defaultFlavors(), PlacementMode: "random", ShareCard: map[string]any{"title": "My Flavor Champion", "accent": "#ffd928", "message": "แชมป์รสชาติของฉันคือ {flavor} จาก Lay's Crunch Squad"}}
 	if len(config) != 0 {
 		raw, _ := json.Marshal(config)
 		var supplied flavorCupConfig
@@ -133,7 +133,7 @@ func newFlavorCupChallenge(config map[string]any) map[string]any {
 		matchCount /= 2
 	}
 	tournament := flavorCupTournament{BracketSize: defaults.BracketSize, Flavors: flavors, Matches: matches, CurrentMatchID: matches[0].ID}
-	return map[string]any{"kind": "flavor_cup", "version": 2, "tournament": tournament, "shareCard": defaults.ShareCard, "placementMode": defaults.PlacementMode, "supportedBracketSizes": []int{4, 8, 16}}
+	return map[string]any{"kind": "flavor_cup", "version": 3, "tournament": tournament, "shareCard": defaults.ShareCard, "placementMode": defaults.PlacementMode, "supportedBracketSizes": []int{4, 8, 16}}
 }
 
 func seedFlavors(flavors []flavorCupFlavor, seedOrder []string) ([]flavorCupFlavor, bool) {
@@ -288,22 +288,22 @@ func secureShuffleFlavors(values []flavorCupFlavor) {
 
 func defaultFlavors() []flavorCupFlavor {
 	return []flavorCupFlavor{
-		{ID: "classic", Name: "Classic", Description: "เค็มคลาสสิก กรอบทุกคำ", Image: "/missions/flavor-placeholder.svg", Color: "#f6c928"},
-		{ID: "bbq", Name: "Bar-B-Q", Description: "หอมเข้มสไตล์บาร์บีคิว", Image: "/missions/flavor-placeholder.svg", Color: "#d85a35"},
-		{ID: "nori", Name: "Nori Seaweed", Description: "หอมสาหร่ายเต็มรส", Image: "/missions/flavor-placeholder.svg", Color: "#42945b"},
-		{ID: "sour-cream", Name: "Sour Cream & Onion", Description: "ครีมมี่ หอมหัวหอม", Image: "/missions/flavor-placeholder.svg", Color: "#78b9cf"},
-		{ID: "hot-spicy", Name: "Hot & Spicy", Description: "เผ็ดร้อนแบบถึงใจ", Image: "/missions/flavor-placeholder.svg", Color: "#d64032"},
-		{ID: "cheese", Name: "Cheese", Description: "ชีสเข้มข้นทุกแผ่น", Image: "/missions/flavor-placeholder.svg", Color: "#ef9d2f"},
-		{ID: "truffle", Name: "Truffle", Description: "หอมทรัฟเฟิลสไตล์พรีเมียม", Image: "/missions/flavor-placeholder.svg", Color: "#5e4c68"},
-		{ID: "lime", Name: "Zesty Lime", Description: "เปรี้ยวซ่า สดชื่น", Image: "/missions/flavor-placeholder.svg", Color: "#93b83e"},
-		{ID: "salt-pepper", Name: "Salt & Pepper", Description: "เค็มหอมพริกไทย", Image: "/missions/flavor-placeholder.svg", Color: "#55575f"},
-		{ID: "tom-yum", Name: "Tom Yum", Description: "แซ่บครบรสต้มยำ", Image: "/missions/flavor-placeholder.svg", Color: "#e96d32"},
-		{ID: "mala", Name: "Mala", Description: "เผ็ดชา หอมเครื่องเทศ", Image: "/missions/flavor-placeholder.svg", Color: "#8c3030"},
-		{ID: "sweet-basil", Name: "Sweet Basil", Description: "หอมกะเพรา รสจัดจ้าน", Image: "/missions/flavor-placeholder.svg", Color: "#3f7b47"},
-		{ID: "chicken", Name: "Roasted Chicken", Description: "หอมไก่อบกลมกล่อม", Image: "/missions/flavor-placeholder.svg", Color: "#b66b37"},
-		{ID: "shrimp", Name: "Grilled Shrimp", Description: "หอมกุ้งย่าง", Image: "/missions/flavor-placeholder.svg", Color: "#e1786b"},
-		{ID: "pizza", Name: "Pizza", Description: "ชีสและมะเขือเทศลงตัว", Image: "/missions/flavor-placeholder.svg", Color: "#c84b3f"},
-		{ID: "honey-butter", Name: "Honey Butter", Description: "หวานหอมเนย", Image: "/missions/flavor-placeholder.svg", Color: "#e1ae3e"},
+		{ID: "classic", Name: "Classic", Description: "เค็มคลาสสิก กรอบทุกคำ", Image: "/missions/products/classic.jpg", Color: "#d5a900"},
+		{ID: "bbq", Name: "Bar-B-Q", Description: "หอมเข้มสไตล์บาร์บีคิว", Image: "/missions/products/barbecue.jpg", Color: "#b9472c"},
+		{ID: "nori", Name: "Nori Seaweed", Description: "หอมสาหร่ายเต็มรส", Image: "/missions/products/salt-vinegar.jpg", Color: "#287443"},
+		{ID: "sour-cream", Name: "Sour Cream & Onion", Description: "ครีมมี่ หอมหัวหอม", Image: "/missions/products/sour-cream.jpg", Color: "#4087a4"},
+		{ID: "hot-spicy", Name: "Hot & Spicy", Description: "เผ็ดร้อนแบบถึงใจ", Image: "/missions/products/barbecue.jpg", Color: "#c12f26"},
+		{ID: "cheese", Name: "Cheese", Description: "ชีสเข้มข้นทุกแผ่น", Image: "/missions/products/classic.jpg", Color: "#d87918"},
+		{ID: "truffle", Name: "Truffle", Description: "หอมทรัฟเฟิลสไตล์พรีเมียม", Image: "/missions/products/classic.jpg", Color: "#493854"},
+		{ID: "lime", Name: "Zesty Lime", Description: "เปรี้ยวซ่า สดชื่น", Image: "/missions/products/salt-vinegar.jpg", Color: "#6b9120"},
+		{ID: "salt-pepper", Name: "Salt & Pepper", Description: "เค็มหอมพริกไทย", Image: "/missions/products/classic.jpg", Color: "#3f4148"},
+		{ID: "tom-yum", Name: "Tom Yum", Description: "แซ่บครบรสต้มยำ", Image: "/missions/products/barbecue.jpg", Color: "#dc551f"},
+		{ID: "mala", Name: "Mala", Description: "เผ็ดชา หอมเครื่องเทศ", Image: "/missions/products/barbecue.jpg", Color: "#722121"},
+		{ID: "sweet-basil", Name: "Sweet Basil", Description: "หอมกะเพรา รสจัดจ้าน", Image: "/missions/products/sour-cream.jpg", Color: "#2c6337"},
+		{ID: "chicken", Name: "Roasted Chicken", Description: "หอมไก่อบกลมกล่อม", Image: "/missions/products/classic.jpg", Color: "#985129"},
+		{ID: "shrimp", Name: "Grilled Shrimp", Description: "หอมกุ้งย่าง", Image: "/missions/products/barbecue.jpg", Color: "#c85c51"},
+		{ID: "pizza", Name: "Pizza", Description: "ชีสและมะเขือเทศลงตัว", Image: "/missions/products/barbecue.jpg", Color: "#aa362d"},
+		{ID: "honey-butter", Name: "Honey Butter", Description: "หวานหอมเนย", Image: "/missions/products/sour-cream.jpg", Color: "#c78b22"},
 	}
 }
 
