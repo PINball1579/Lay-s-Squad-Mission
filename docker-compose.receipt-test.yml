@@ -1,0 +1,15 @@
+# Isolated synthetic OCR provider for end-to-end tests. Never use for a campaign.
+services:
+  ocr-fixture:
+    image: node:24-bookworm-slim
+    command: ["node", "/test/receipt-ocr-fixture.mjs"]
+    volumes:
+      - ./frontend/scripts/receipt-ocr-fixture.mjs:/test/receipt-ocr-fixture.mjs:ro
+      - ${RECEIPT_FIXTURE_DIR:?Generate receipt fixtures first}:/fixtures:ro
+  api:
+    environment:
+      IAPP_API_KEY: local-ocr-fixture
+      IAPP_OCR_ENDPOINT: http://ocr-fixture:9090/v3/store/ocr/document/ocr
+      NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1},ocr-fixture
+    depends_on:
+      ocr-fixture: { condition: service_started }

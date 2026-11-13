@@ -56,6 +56,8 @@ func MissionAttemptTTL(role domain.Role) time.Duration {
 
 func NewMissionChallengeWithConfig(role domain.Role, config map[string]any) map[string]any {
 	switch role {
+	case domain.QRRunner:
+		return map[string]any{"kind": "receipt_ocr", "version": 2, "maxUploadBytes": 10 << 20, "provider": "OpenThai 2.0 OCR Text"}
 	case domain.CrunchHunter:
 		challenge := defaultCrunchHuntChallenge()
 		for _, key := range []string{"timerSeconds", "maxHints", "images", "differences", "scoring", "comparisonMode"} {

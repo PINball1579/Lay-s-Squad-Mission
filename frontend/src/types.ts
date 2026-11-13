@@ -45,6 +45,6 @@ export const roles: { code: Role; title: string; icon: string; description: stri
   { code: 'flavor_scout', title: 'Crunch Hunter', icon: '◎', description: 'จับผิดภาพชั้นวางให้ครบก่อนหมดเวลา' },
   { code: 'crunch_creator', title: 'Flavor Referee', icon: '♛', description: 'เลือกผู้ชนะในศึก Flavor Cup' },
   { code: 'snack_detective', title: 'นักสืบสายสแน็ก', icon: '?', description: 'แก้ปริศนาและค้นหาคำตอบที่ซ่อนอยู่' },
-  { code: 'qr_runner', title: 'นักวิ่ง QR', icon: '⌁', description: 'ค้นหาและยืนยันโค้ดจากจุดกิจกรรม' },
+  { code: 'qr_runner', title: 'นักล่าใบเสร็จ', icon: '⌁', description: 'ถ่ายใบเสร็จที่มีเลย์ ให้ระบบช่วยตรวจสอบ' },
 ]
 

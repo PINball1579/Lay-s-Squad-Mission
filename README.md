@@ -64,8 +64,9 @@ Go 1.27 and Node 24 are the pinned container toolchains. Local Go caches can be 
 4. Lock each unique role and complete its mission.
    - **Crunch Hunter:** find all configured differences in the two shelf images before time expires.
    - **Flavor Referee:** choose through a 16-flavor persisted Flavor Cup; the full bracket is revealed only after a champion is crowned.
-   - **Snack Detective** and **QR Runner:** retain their existing journeys.
-5. Use `mock:demo-store` for QR Runner.
+   - **Snack Detective:** answer the squad questions.
+   - **Receipt Hunter:** photograph/upload a receipt and let OpenThai find Lay's.
+5. Configure `IAPP_API_KEY` privately for real OCR, or use the isolated test provider described in [receipt OCR](docs/RECEIPT_OCR.md).
 6. The fourth idempotent completion unlocks the local fixture reward.
 7. Review consent-filtered metrics in `/admin`.
 

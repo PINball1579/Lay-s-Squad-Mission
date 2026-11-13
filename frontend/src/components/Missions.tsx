@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import type { FlavorCupVoteResult, Role } from '../types'
-import { copyText, type LineAdapter } from '../lib/liff'
+import { copyText } from '../lib/liff'
 import { BrandHeader, CampaignFooter } from './Brand'
-import { CameraScanner } from './CameraScanner'
+import { ReceiptMission } from './ReceiptMission'
 
 type Track = (name: string, properties: Record<string, unknown>) => Promise<void>
 
@@ -11,15 +11,14 @@ type Props = {
   challenge: Record<string, unknown>
   expiresAt: string
   errorMessage?: string
-  line: LineAdapter
-  validateQR: (token: string) => Promise<{ locationId: string }>
+  verifyReceipt: (file: File) => Promise<{ verified: boolean; brand: string }>
   onFlavorVote: (matchId: string, winnerId: string, decisionMs: number) => Promise<FlavorCupVoteResult>
   track: Track
   onComplete: (properties: Record<string, unknown>) => Promise<void>
   onBack: () => void
 }
 
-export function MissionRunner({ role, challenge, expiresAt, errorMessage, line, validateQR, onFlavorVote, track, onComplete, onBack }: Props) {
+export function MissionRunner({ role, challenge, expiresAt, errorMessage, verifyReceipt, onFlavorVote, track, onComplete, onBack }: Props) {
   return <main className="screen-enter mx-auto min-h-screen max-w-4xl px-4 py-5 sm:px-6">
     <BrandHeader label="MISSION IN PROGRESS" />
     <div className="mb-5 flex flex-wrap items-center justify-between gap-3"><button className="min-h-11 rounded-full border border-crunch-ink/10 bg-white px-4 text-sm font-bold" onClick={onBack}>← กลับไปหาทีม</button><p className="text-xs text-crunch-ink/50">บันทึกรอบถึง {new Date(expiresAt).toLocaleString('th-TH', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</p></div>
@@ -27,7 +26,7 @@ export function MissionRunner({ role, challenge, expiresAt, errorMessage, line, 
     {role === 'flavor_scout' && <CrunchHunt challenge={challenge} onComplete={onComplete} track={track} />}
     {role === 'crunch_creator' && <FlavorCup challenge={challenge} onVote={onFlavorVote} onComplete={onComplete} track={track} />}
     {role === 'snack_detective' && <SnackDetective challenge={challenge} onComplete={onComplete} />}
-    {role === 'qr_runner' && <QRRunner line={line} validateQR={validateQR} onComplete={onComplete} />}
+    {role === 'qr_runner' && <MissionShell eyebrow="นักล่าใบเสร็จ" title="Receipt Hunt — ถ่ายใบเสร็จ พิชิตภารกิจ"><ReceiptMission verify={verifyReceipt} onComplete={onComplete} /></MissionShell>}
     <CampaignFooter />
   </main>
 }
@@ -269,7 +268,7 @@ function Choice({ label, value, onChange, options, labels = {}, disabled = false
 
 export function SnackDetective({ onComplete, challenge = {} }: Pick<Props, 'onComplete'> & { challenge?: Record<string, unknown> }) {
   const questions = useMemo(() => challenge.variant === 'location' ? [
-    { id: 'q1', prompt: 'บทบาทใดมีหน้าที่ยืนยันจุดกิจกรรม?', options: [['QR Runner','นักวิ่ง QR'],['Crunch Hunter','Crunch Hunter'],['Flavor Referee','Flavor Referee']], answer: 'QR Runner' },
+    { id: 'q1', prompt: 'บทบาทใดมีหน้าที่ตรวจใบเสร็จ?', options: [['QR Runner','นักล่าใบเสร็จ'],['Crunch Hunter','Crunch Hunter'],['Flavor Referee','Flavor Referee']], answer: 'QR Runner' },
     { id: 'q2', prompt: 'เมื่อทีมทำครบทุกภารกิจจะเกิดอะไรขึ้น?', options: [['Mock Crunch Badge','ปลดล็อกสิทธิ์รางวัล'],['Cash coupon','รับเงินสดทันที'],['Real product','สุ่มรสชาติใหม่']], answer: 'Mock Crunch Badge' },
   ] : [
     { id: 'q1', prompt: 'หนึ่งทีมต้องมีบทบาทไม่ซ้ำกันกี่บทบาท?', options: [['Two','2 บทบาท'],['Three','3 บทบาท'],['Four','4 บทบาท']], answer: 'Four' },
@@ -283,43 +282,5 @@ export function SnackDetective({ onComplete, challenge = {} }: Pick<Props, 'onCo
     {questions.map((question, index) => <fieldset key={question.id} className="mb-6"><legend className="font-black">{index + 1}. {question.prompt}</legend><div className="mt-2 grid gap-2">{question.options.map(([value, label]) => <label key={value} className="flex min-h-12 items-center gap-3 rounded-xl bg-crunch-cream px-3"><input type="radio" name={question.id} value={value} checked={answers[question.id] === value} onChange={() => setAnswers((currentAnswers) => ({ ...currentAnswers, [question.id]: value }))} /> {label}</label>)}</div></fieldset>)}
     <Choice label="มั่นใจแค่ไหน?" value={confidence} onChange={setConfidence} options={['sure','somewhat sure','guessing']} labels={{ sure: 'มั่นใจมาก', 'somewhat sure': 'ค่อนข้างมั่นใจ', guessing: 'ขอเดาดู' }} />
     <button disabled={Object.keys(answers).length !== questions.length || pending} onClick={() => void run(() => onComplete({ answers, confidence, accuracy: score / questions.length, difficultQuestions: questions.filter((question) => answers[question.id] !== question.answer).map((question) => question.id) }))} className="mt-5 min-h-14 w-full rounded-2xl bg-crunch-red font-black text-white disabled:opacity-40">{pending ? 'กำลังส่งคำตอบ…' : 'ส่งคำตอบ'}</button>
-  </MissionShell>
-}
-
-export function QRRunner({ line, validateQR, onComplete }: Pick<Props, 'line' | 'validateQR' | 'onComplete'>) {
-  const localMode = import.meta.env.VITE_MOCK_LIFF !== 'false'
-  const [token, setToken] = useState(localMode ? 'mock:demo-store' : '')
-  const [status, setStatus] = useState('')
-  const [scanning, setScanning] = useState(false)
-  const { pending, run } = usePendingAction()
-  const verifyValue = async (value: string) => {
-    try { const result = await validateQR(value); setStatus(`ยืนยันแล้วที่ ${result.locationId}`); await onComplete({ locationId: result.locationId, conversion: true }) }
-    catch { setStatus('โค้ดไม่ถูกต้องหรือหมดอายุ กรุณาลองอีกครั้ง') }
-  }
-  const scan = () => run(async () => {
-    setStatus('')
-    if (!localMode) {
-      try {
-        const value = await line.scanQR()
-        if (value === '') { setStatus('ยกเลิกการสแกนแล้ว'); return }
-        if (value) { setToken(value); await verifyValue(value); return }
-      } catch { /* The browser camera remains available when LIFF scanning is unsupported. */ }
-    }
-    setScanning(true)
-  })
-  const onCameraResult = useCallback((value: string) => {
-    setScanning(false)
-    setToken(value)
-    void run(() => verifyValue(value))
-  // This callback only runs while this scanner is mounted for the current attempt.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-  return <MissionShell eyebrow="นักวิ่ง QR" title="สแกน ยืนยัน แล้วครันช์!">
-    <div className="mx-auto grid aspect-square max-w-56 place-items-center rounded-3xl border-8 border-crunch-ink bg-white text-center"><span className="text-5xl" aria-hidden>⌁</span><small>สแกนโค้ด<br />ที่จุดกิจกรรม</small></div>
-    <button disabled={pending || scanning} onClick={() => void scan()} className="mt-5 min-h-14 w-full rounded-2xl bg-crunch-ink font-black text-white disabled:opacity-40">เปิดกล้องสแกน QR</button>
-    {scanning && <CameraScanner onResult={onCameraResult} onClose={() => setScanning(false)} />}
-    <label className="mt-4 block font-bold">{localMode ? 'รหัสสำหรับทดสอบภายใน' : 'หรือกรอกรหัสจากจุดกิจกรรม'}<input disabled={pending} value={token} onChange={(event) => setToken(event.target.value)} className="mt-1 min-h-12 w-full rounded-xl border-2 border-crunch-ink/20 px-3 disabled:opacity-40" /></label>
-    <button disabled={pending || !token} onClick={() => void run(() => verifyValue(token))} className="mt-3 min-h-14 w-full rounded-2xl bg-crunch-red font-black text-white disabled:opacity-40">{pending ? 'กำลังยืนยัน…' : 'ยืนยันโค้ด'}</button>
-    <p className="mt-3 font-bold" role="status">{status}</p>
   </MissionShell>
 }

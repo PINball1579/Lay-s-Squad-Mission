@@ -48,6 +48,7 @@ type GameStore interface {
 	CompleteMission(string, string, domain.Role, string, string, map[string]any) (domain.Squad, domain.Completion, bool, error)
 	RedeemReward(string, string, string) (domain.Squad, bool, error)
 	RewardCoupon(string, string) (domain.RewardCoupon, error)
+	CheckReceiptAttempt(string, string) error
 	LeaveSquad(string, string) (domain.Squad, error)
 	GetSquad(string, string) (domain.Squad, error)
 	CurrentSquad(string) (domain.Squad, bool)
@@ -67,6 +68,7 @@ type SessionStore interface {
 }
 
 type ServerConfig struct {
+	ReceiptOCR    ReceiptOCR
 	Game          GameStore
 	SessionStore  SessionStore
 	LineVerifier  LineVerifier
@@ -81,6 +83,8 @@ type ServerConfig struct {
 }
 
 type Server struct {
+	receiptOCR    ReceiptOCR
+	receiptSlots  chan struct{}
 	game          GameStore
 	sessionStore  SessionStore
 	lineVerifier  LineVerifier
@@ -138,6 +142,7 @@ func New(config ServerConfig) *Server {
 		panic(err)
 	}
 	server := &Server{
+		receiptOCR: config.ReceiptOCR, receiptSlots: make(chan struct{}, 4),
 		game: config.Game, sessionStore: config.SessionStore, lineVerifier: config.LineVerifier, allowMockAuth: config.AllowMockAuth,
 		allowedOrigin: config.AllowedOrigin, adminToken: config.AdminToken,
 		pseudonymKey: append([]byte(nil), config.PseudonymKey...), qr: qr,
@@ -170,7 +175,10 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /api/v1/squads/{squadID}/missions/{role}/start", s.startMission)
 	s.mux.HandleFunc("POST /api/v1/squads/{squadID}/missions/flavor-cup/{attemptID}/vote", s.flavorCupVote)
 	s.mux.HandleFunc("POST /api/v1/squads/{squadID}/missions/{role}/complete", s.completeMission)
-	s.mux.HandleFunc("POST /api/v1/qr/validate", s.validateQR)
+	s.mux.HandleFunc("POST /api/v1/qr/validate", func(w http.ResponseWriter, r *http.Request) {
+		writeError(w, http.StatusGone, "qr_retired", "This mission now requires a receipt photo")
+	})
+	s.mux.HandleFunc("POST /api/v1/missions/receipts/{attemptID}/verify", s.verifyReceipt)
 	s.mux.HandleFunc("GET /api/v1/squads/{squadID}/reward", s.getReward)
 	s.mux.HandleFunc("POST /api/v1/squads/{squadID}/reward/redeem", s.redeemReward)
 	s.mux.HandleFunc("POST /api/v1/events", s.event)
@@ -197,7 +205,7 @@ func (s *Server) campaign(w http.ResponseWriter, _ *http.Request) {
 		"tagline": "รวมแก๊ง 4 คน พิชิต 4 ภารกิจ แล้วเปิด Crunch Vault", "squadSize": 4,
 		"roles":    domain.Roles,
 		"flavors":  []string{"Classic", "Bar-B-Q", "Nori Seaweed", "Sour Cream & Onion", "Hot & Spicy", "Cheese", "Truffle", "Zesty Lime", "Salt & Pepper", "Tom Yum", "Mala", "Sweet Basil", "Roasted Chicken", "Grilled Shrimp", "Pizza", "Honey Butter"},
-		"missions": []string{"Crunch Hunt", "Flavor Cup", "Snack Detective", "QR Runner"},
+		"missions": []string{"Crunch Hunt", "Flavor Cup", "Snack Detective", "Receipt Hunt"},
 		"termsUrl": "/docs/placeholder-terms", "privacyUrl": "/docs/placeholder-privacy",
 		"brand": map[string]string{"primary": "#ffd928", "accent": "#e44532", "assetStatus": "campaign-ready"},
 	})
@@ -462,10 +470,7 @@ func (s *Server) mission(w http.ResponseWriter, r *http.Request) {
 		domain.CrunchHunter:   {"title": "Crunch Hunt — Spot the Shelf", "kind": "crunch_hunt", "configSource": "mission challenge"},
 		domain.FlavorReferee:  {"title": "Flavor Cup — Crown Your Crunch", "kind": "flavor_cup", "bracketSizes": []int{4, 8, 16}, "configSource": "mission challenge"},
 		domain.SnackDetective: {"title": "แกะเบาะแสสายสแน็ก", "kind": "quiz", "contentSource": "issued attempt challenge", "variants": []string{"squad", "location"}},
-		domain.QRRunner:       {"title": "สแกนจุดกิจกรรม", "kind": "qr", "manualEntry": true},
-	}
-	if s.allowMockAuth && role == domain.QRRunner {
-		content[domain.QRRunner]["mockCode"] = "mock:demo-store"
+		domain.QRRunner:       {"title": "Receipt Hunt — ถ่ายใบเสร็จ พิชิตภารกิจ", "kind": "receipt_ocr", "provider": "OpenThai 2.0 OCR Text"},
 	}
 	writeJSON(w, http.StatusOK, content[role])
 }
@@ -522,9 +527,9 @@ func (s *Server) completeMission(w http.ResponseWriter, r *http.Request) {
 	qrProofAvailable := true
 	if role == domain.QRRunner {
 		proof, proofErr := s.game.QRProof(sess.UserID, sess.ID, request.AttemptID)
-		qrProofAvailable = proofErr == nil
+		qrProofAvailable = proofErr == nil && proof.LocationID == service.ReceiptProofSource
 		if qrProofAvailable {
-			request.Properties = map[string]any{"qrVerified": true, "locationId": proof.LocationID, "scanProofId": proof.Nonce, "proofExpiresAt": proof.ExpiresAt}
+			request.Properties = map[string]any{"qrVerified": true, "receiptVerified": true, "brand": "lays", "locationId": proof.LocationID, "receiptHash": proof.Nonce, "proofExpiresAt": proof.ExpiresAt}
 		} else {
 			// Nil properties request only an exact attempt/key replay. This lets a
 			// client recover a successful response after the short-lived QR proof
@@ -535,7 +540,7 @@ func (s *Server) completeMission(w http.ResponseWriter, r *http.Request) {
 	squad, completion, created, err := s.game.CompleteMission(sess.UserID, r.PathValue("squadID"), role, request.AttemptID, idempotencyKey, request.Properties)
 	if err != nil {
 		if role == domain.QRRunner && !qrProofAvailable && errors.Is(err, service.ErrMissionFailed) {
-			writeError(w, http.StatusUnprocessableEntity, "qr_verification_required", "Verify a valid campaign QR code first")
+			writeError(w, http.StatusUnprocessableEntity, "receipt_verification_required", "Upload a receipt containing Lay's first")
 			return
 		}
 		if errors.Is(err, service.ErrMissionFailed) || errors.Is(err, service.ErrAttemptInvalid) {
@@ -960,7 +965,7 @@ func analyticsMissionProperties(role domain.Role, properties map[string]any) map
 		domain.CrunchHunter:   {"foundDifferenceIds": true, "completionMs": true, "correctTaps": true, "wrongTaps": true, "hintsUsed": true, "score": true, "speedBonus": true},
 		domain.FlavorReferee:  {"championId": true, "matchCount": true, "completionMs": true},
 		domain.SnackDetective: {"confidence": true, "accuracy": true, "difficultQuestions": true},
-		domain.QRRunner:       {"locationId": true},
+		domain.QRRunner:       {"receiptVerified": true, "brand": true},
 	}[role]
 	result := map[string]any{}
 	for key, value := range properties {

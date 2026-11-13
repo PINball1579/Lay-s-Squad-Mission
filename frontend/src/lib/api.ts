@@ -28,7 +28,7 @@ export class ApiError extends Error {
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const headers = new Headers(options.headers)
-  if (options.body) headers.set('Content-Type', 'application/json')
+  if (options.body && !(options.body instanceof FormData)) headers.set('Content-Type', 'application/json')
   if (csrfToken && options.method && options.method !== 'GET') headers.set('X-CSRF-Token', csrfToken)
   const response = await fetch(`/api/v1${path}`, { ...options, headers, credentials: 'include' })
   if (!response.ok) {
@@ -70,7 +70,7 @@ export const api = {
     post<FlavorCupVoteResult>(`/squads/${squadId}/missions/flavor-cup/${attemptId}/vote`, { matchId, winnerId, decisionMs }),
   completeMission: (id: string, role: Role, attemptId: string, properties: Record<string, unknown>) =>
     post<{ squad: Squad }>(`/squads/${id}/missions/${role}/complete`, { attemptId, properties }, { 'Idempotency-Key': stableIdempotencyKey(`mission:${id}:${role}`) }),
-  validateQR: (token: string, attemptId: string) => post<{ locationId: string }>('/qr/validate', { token, attemptId }),
+  verifyReceipt: (attemptId:string,file:File) => {const body=new FormData();body.append('file',file);body.append('receiptConsent','true');return request<{verified:boolean;brand:string}>(`/missions/receipts/${attemptId}/verify`,{method:'POST',body})},
   redeem: (id: string) => post<Squad>(`/squads/${id}/reward/redeem`, {}, { 'Idempotency-Key': stableIdempotencyKey(`reward:${id}`) }),
   reward: (id: string) => request<RewardDetails>(`/squads/${id}/reward`, { cache: 'no-store' }),
   event: (name: string, details: Record<string, unknown> = {}) => post<{ stored: boolean }>('/events', { name, ...details }),

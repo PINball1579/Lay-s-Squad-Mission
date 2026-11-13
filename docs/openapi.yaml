@@ -105,7 +105,24 @@ paths:
       tags: [Missions]
       parameters: [{$ref: '#/components/parameters/Csrf'}]
       requestBody: {required: true, content: {application/json: {schema: {type: object, required: [token, attemptId], properties: {token: {type: string}, attemptId: {type: string, format: uuid}}}}}}
-      responses: {'200': {description: Verified location claims}, '422': {$ref: '#/components/responses/Error'}}
+      deprecated: true
+      responses: {'410': {description: Retired; use receipt verification}}
+  /missions/receipts/{attemptId}/verify:
+    parameters: [{name: attemptId, in: path, required: true, schema: {type: string, format: uuid}}, {$ref: '#/components/parameters/Csrf'}]
+    post:
+      tags: [Missions]
+      summary: Verify a receipt image through server-side OpenThai OCR
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, receiptConsent]
+              properties:
+                file: {type: string, format: binary, description: JPEG or PNG up to 10 MiB}
+                receiptConsent: {type: string, const: 'true'}
+      responses: {'200': {description: Brand verified; session-bound proof saved}, '400': {$ref: '#/components/responses/Error'}, '413': {$ref: '#/components/responses/Error'}, '415': {$ref: '#/components/responses/Error'}, '422': {$ref: '#/components/responses/Error'}, '429': {$ref: '#/components/responses/Error'}, '503': {$ref: '#/components/responses/Error'}}
   /squads/{squadId}/reward:
     parameters: [{$ref: '#/components/parameters/SquadId'}]
     get:
@@ -180,7 +197,7 @@ components:
         - {$ref: '#/components/schemas/CrunchHuntChallenge'}
         - {$ref: '#/components/schemas/FlavorCupChallenge'}
         - {$ref: '#/components/schemas/SnackDetectiveChallenge'}
-        - {$ref: '#/components/schemas/QRRunnerChallenge'}
+        - {$ref: '#/components/schemas/ReceiptChallenge'}
     CrunchHuntChallenge:
       type: object
       required: [kind, version, images, differences, timerSeconds, maxHints, scoring]
@@ -221,13 +238,12 @@ components:
               id: {type: string, enum: [q1, q2]}
               prompt: {type: string}
               options: {type: array, minItems: 3, items: {type: string}}
-    QRRunnerChallenge:
+    ReceiptChallenge:
       type: object
-      additionalProperties: false
       required: [kind, version]
       properties:
-        kind: {type: string, const: qr_runner}
-        version: {type: integer, const: 1}
+        kind: {type: string, const: receipt_ocr}
+        version: {type: integer, const: 2}
     Event: {type: object, required: [name], properties: {name: {type: string}, squadId: {type: string}, role: {type: string}, sessionId: {type: string}, properties: {type: object, additionalProperties: true}}}
     Error: {type: object, properties: {error: {type: object, properties: {code: {type: string}, message: {type: string}}}}}
   responses:

@@ -12,7 +12,7 @@ be created after the project review.
 - Responsive campaign landing page, mission overview, and team creation.
 - Invitation sharing/copying with feedback and automatic invite consumption.
 - Persistent squad membership, one role per member, completion and reward records.
-- Crunch Hunt, persistent 16-flavor Flavor Cup, Snack Detective, and QR Runner.
+- Crunch Hunt, persistent 16-flavor Flavor Cup, Snack Detective, and Receipt Hunt.
 - Team roster, completed-task state, progress, and reward confirmation.
 - Consent choices and Thai operations dashboard with CSV export.
 - Production LINE authentication adapter, signed QR validation, CSRF/session
@@ -35,7 +35,7 @@ be created after the project review.
 6. Publish the approved Thai participation terms and privacy notice, including
    controller/contact information and retention/deletion details. Existing copy
    explains the implemented data flow but is not a complete campaign notice.
-7. Run the real LINE login, share picker, camera/QR, reopen/resume, coupon,
+7. Run the real LINE login, share picker, receipt photo/OCR, reopen/resume, coupon,
    and pasted-link preview journey on actual iOS and Android devices.
 
 Rich link previews require a publicly reachable URL. Localhost is intended for

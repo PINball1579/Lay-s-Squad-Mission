@@ -1,4 +1,5 @@
 import { chromium, expect, request, test, type Page } from '@playwright/test'
+import { join } from 'node:path'
 
 async function login(page: Page, mockUser: 'mali' | 'nok' | 'beam' | 'ploy', invite = '', analytics = true) {
   await page.goto(invite ? `/?invite=${encodeURIComponent(invite)}` : '/')
@@ -23,7 +24,7 @@ test('four-player journey, race handling, consent, QR, reward, and dashboard', a
   const browser = process.env.PLAYWRIGHT_CDP_ENDPOINT
     ? await chromium.connectOverCDP(process.env.PLAYWRIGHT_CDP_ENDPOINT)
     : await chromium.launch(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH
-      ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH, args: process.env.PLAYWRIGHT_CAMERA_FILE ? ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream', `--use-file-for-fake-video-capture=${process.env.PLAYWRIGHT_CAMERA_FILE}`] : [] }
+      ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH, args: [] }
       : undefined)
   const players = await Promise.all(['mali', 'nok', 'beam', 'ploy'].map(async () => {
     const context = await browser.newContext({ ...browserContextOptions() })
@@ -63,7 +64,7 @@ test('four-player journey, race handling, consent, QR, reward, and dashboard', a
   await expect(creatorPage.getByRole('region', { name: 'ภารกิจของทีม' })).toBeVisible()
   await claim(creatorPage, 'Flavor Referee')
   await claim(beam, 'นักสืบสายสแน็ก')
-  await claim(ploy, 'นักวิ่ง QR')
+  await claim(ploy, 'นักล่าใบเสร็จ')
 
   await roleCard(flavorPage, 'Crunch Hunter').getByRole('button', { name: /เริ่มภารกิจของฉัน/i }).click()
   await expect(flavorPage.getByRole('heading', { name: /Crunch Hunt/ })).toBeVisible()
@@ -99,21 +100,21 @@ test('four-player journey, race handling, consent, QR, reward, and dashboard', a
     await beam.getByLabel('4 บทบาท', { exact: true }).check()
     await beam.getByLabel('ทำครบทั้ง 4 ภารกิจ', { exact: true }).check()
   } else {
-    await beam.getByLabel('นักวิ่ง QR', { exact: true }).check()
+    await beam.getByLabel('นักล่าใบเสร็จ', { exact: true }).check()
     await beam.getByLabel('ปลดล็อกสิทธิ์รางวัล', { exact: true }).check()
   }
   await beam.getByRole('button', { name: /ส่งคำตอบ/i }).click()
 
-  await roleCard(ploy, 'นักวิ่ง QR').getByRole('button', { name: /เริ่มภารกิจของฉัน/i }).click()
-  await ploy.getByLabel('รหัสสำหรับทดสอบภายใน').fill('not-a-valid-code')
-  await ploy.getByRole('button', { name: /ยืนยันโค้ด/i }).click()
-  await expect(ploy.getByRole('status')).toContainText(/โค้ดไม่ถูกต้อง/i)
-  if (process.env.PLAYWRIGHT_CAMERA_FILE) {
-    await ploy.getByRole('button', { name: 'เปิดกล้องสแกน QR' }).click()
-  } else {
-    await ploy.getByLabel('รหัสสำหรับทดสอบภายใน').fill('mock:demo-store')
-    await ploy.getByRole('button', { name: /ยืนยันโค้ด/i }).click()
-  }
+  await roleCard(ploy, 'นักล่าใบเสร็จ').getByRole('button', { name: /เริ่มภารกิจของฉัน/i }).click()
+  const receiptFixtures = process.env.RECEIPT_FIXTURE_DIR
+  if (!receiptFixtures) throw new Error('Generate receipt fixtures and run with docker-compose.receipt-test.yml; see docs/RECEIPT_OCR.md')
+  await ploy.getByLabel('เลือกภาพใบเสร็จ', { exact: true }).setInputFiles(join(receiptFixtures, 'negative.png'))
+  await expect.poll(() => ploy.getByAltText('ภาพใบเสร็จที่จะส่งตรวจ').evaluate((image) => (image as HTMLImageElement).naturalWidth)).toBeGreaterThan(0)
+  await ploy.getByRole('checkbox', { name: 'ยินยอมส่งภาพใบเสร็จให้ iApp อ่านข้อความ' }).check()
+  await ploy.getByRole('button', { name: 'ส่งใบเสร็จเพื่อตรวจสอบ' }).click()
+  await expect(ploy.getByRole('alert')).toContainText('ยังไม่พบรายการเลย์')
+  await ploy.getByLabel('เลือกภาพใบเสร็จ', { exact: true }).setInputFiles(join(receiptFixtures, 'positive.png'))
+  await ploy.getByRole('button', { name: 'ส่งใบเสร็จเพื่อตรวจสอบ' }).click()
   await expect(ploy.getByRole('heading', { name: /Crunch Vault เปิดแล้ว/i })).toBeVisible()
   const beforeClaim = await contexts[3].request.get(`/api/v1/squads/${createBody.squad.id}/reward`)
   expect((await beforeClaim.json()).coupon).toBeNull()

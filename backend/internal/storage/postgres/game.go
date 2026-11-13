@@ -67,7 +67,7 @@ func (g *Game) Close() error { return g.db.Close() }
 
 func (g *Game) Health(ctx context.Context) error {
 	var applied bool
-	if err := g.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE version='0012_flavor_cup_sixteen.up.sql')`).Scan(&applied); err != nil {
+	if err := g.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE version='0013_receipt_mission.up.sql')`).Scan(&applied); err != nil {
 		return err
 	}
 	if !applied {
@@ -677,6 +677,9 @@ func (g *Game) CompleteMission(userID, squadID string, role domain.Role, attempt
 	}
 	if role == domain.QRRunner {
 		location, _ := properties["locationId"].(string)
+		if location != service.ReceiptProofSource {
+			return domain.Squad{}, domain.Completion{}, false, service.ErrMissionFailed
+		}
 		var verified bool
 		if err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM mission_attempts ma JOIN qr_locations ql ON ql.id=ma.qr_location_id AND ql.active WHERE ma.id=$1 AND ma.assignment_id=$2 AND ma.qr_session_id IS NOT NULL AND ma.qr_nonce IS NOT NULL AND ma.qr_proof_expires_at>now() AND ql.code=$3)`, attemptID, assignmentID, location).Scan(&verified); err != nil {
 			return domain.Squad{}, domain.Completion{}, false, err

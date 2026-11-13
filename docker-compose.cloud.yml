@@ -1,5 +1,9 @@
 services:
   api:
+    environment:
+      SSL_CERT_FILE: /run/environment-proxy-ca.crt
+    volumes:
+      - ${CODEX_PROXY_CERT:-/etc/ssl/certs/ca-certificates.crt}:/run/environment-proxy-ca.crt:ro
     build:
       secrets:
         - proxy_ca

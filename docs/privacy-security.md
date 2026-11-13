@@ -8,6 +8,13 @@ Flavor Cup selections are observed campaign interactions, not confirmed purchase
 
 Retention periods, subject access/deletion procedures, campaign controller identity, international transfer language, and legal basis require campaign-owner and counsel approval before real use.
 
+Receipt Hunt sends a player-selected image to iApp/OpenThai only after explicit
+processing confirmation. The app does not persist receipt images or extracted
+text; a SHA-256 digest and verification metadata remain with the mission record.
+Receipt contents and hashes must not be placed in analytics or application logs.
+The campaign notice must disclose iApp as the OCR processor. See
+[receipt OCR](RECEIPT_OCR.md) for limits and the implemented matching rule.
+
 ## Threat model and controls
 
 | Risk | MVP control | Production follow-up |

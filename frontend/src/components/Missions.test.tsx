@@ -1,8 +1,7 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { CrunchHunt, FlavorCup, QRRunner, SnackDetective } from './Missions'
-import { MockLineAdapter } from '../lib/liff'
+import { CrunchHunt, FlavorCup, SnackDetective } from './Missions'
 import type { FlavorCupVoteResult } from '../types'
 
 afterEach(cleanup)
@@ -102,13 +101,4 @@ describe('preserved missions', () => {
     expect(complete).toHaveBeenCalledWith(expect.objectContaining({ accuracy: 1, confidence: 'somewhat sure' }))
   })
 
-  it('validates the local QR fixture before completion', async () => {
-    const complete = vi.fn().mockResolvedValue(undefined)
-    const validateQR = vi.fn().mockResolvedValue({ locationId: 'demo-store' })
-    render(<QRRunner line={new MockLineAdapter()} validateQR={validateQR} onComplete={complete} />)
-    await userEvent.click(screen.getByRole('button', { name: /ยืนยันโค้ด/ }))
-    expect(validateQR).toHaveBeenCalledWith('mock:demo-store')
-    expect(await screen.findByText(/ยืนยันแล้วที่ demo-store/)).toBeInTheDocument()
-    expect(complete).toHaveBeenCalledWith({ locationId: 'demo-store', conversion: true })
-  })
 })

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	lineadapter "github.com/PINball1579/Lay-s-Squad-Mission/backend/internal/adapters/line"
+	"github.com/PINball1579/Lay-s-Squad-Mission/backend/internal/adapters/ocr"
 	"github.com/PINball1579/Lay-s-Squad-Mission/backend/internal/httpapi"
 	"github.com/PINball1579/Lay-s-Squad-Mission/backend/internal/service"
 	postgresstore "github.com/PINball1579/Lay-s-Squad-Mission/backend/internal/storage/postgres"
@@ -78,14 +79,19 @@ func main() {
 	if channelID := os.Getenv("LINE_CHANNEL_ID"); channelID != "" {
 		verifier = lineadapter.Verifier{ChannelID: channelID}
 	}
+	var receiptOCR httpapi.ReceiptOCR
+	if key := os.Getenv("IAPP_API_KEY"); key != "" {
+		receiptOCR = ocr.OpenThai{APIKey: key, URL: env("IAPP_OCR_ENDPOINT", ocr.Endpoint)}
+	}
 	server := httpapi.New(httpapi.ServerConfig{
-		Game: game, SessionStore: sessions, LineVerifier: verifier, AllowMockAuth: mockMode,
+		ReceiptOCR: receiptOCR,
+		Game:       game, SessionStore: sessions, LineVerifier: verifier, AllowMockAuth: mockMode,
 		AllowedOrigin: env("ALLOWED_ORIGIN", "http://localhost:5173"),
 		AdminToken:    adminToken, PseudonymKey: []byte(pseudonymKey),
 		QRSecret: []byte(qrSecret), SecureCookies: secureCookies, Logger: logger,
 		TrustProxy: strings.EqualFold(env("TRUST_PROXY_HEADERS", "false"), "true"),
 	})
-	httpServer := &http.Server{Addr: ":" + env("PORT", "8080"), Handler: server.Handler(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second}
+	httpServer := &http.Server{Addr: ":" + env("PORT", "8080"), Handler: server.Handler(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 60 * time.Second, WriteTimeout: 75 * time.Second, IdleTimeout: 60 * time.Second}
 
 	go func() {
 		logger.Info("API listening", "address", httpServer.Addr, "mockLiff", mockMode)

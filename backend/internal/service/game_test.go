@@ -114,7 +114,7 @@ func TestMissionCompletionIsIdempotentAndUnlocksOnce(t *testing.T) {
 			t.Fatal(err)
 		}
 		if role == domain.QRRunner {
-			if _, err := game.VerifyQR(users[i].ID, "test-session", attempt.ID, domain.QRProof{LocationID: "demo-store", Nonce: "test-proof", ExpiresAt: time.Date(2027, 1, 1, 0, 0, 0, 0, time.UTC).Unix()}); err != nil {
+			if _, err := game.VerifyQR(users[i].ID, "test-session", attempt.ID, domain.QRProof{LocationID: ReceiptProofSource, Nonce: "test-proof", ExpiresAt: time.Date(2027, 1, 1, 0, 0, 0, 0, time.UTC).Unix()}); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -241,7 +241,7 @@ func validProperties(role domain.Role, challenges ...map[string]any) map[string]
 		}
 		return map[string]any{"answers": map[string]any{"q1": "Four", "q2": "All four missions"}, "confidence": "sure"}
 	case domain.QRRunner:
-		return map[string]any{"qrVerified": true, "locationId": "demo-store"}
+		return map[string]any{"qrVerified": true, "locationId": ReceiptProofSource}
 	default:
 		return nil
 	}
@@ -317,7 +317,7 @@ func TestMissionSuccessCriteriaAndConcurrentRewardRedemption(t *testing.T) {
 			t.Fatal(err)
 		}
 		if role == domain.QRRunner {
-			if _, err := game.VerifyQR(users[i].ID, "test-session", attempt.ID, domain.QRProof{LocationID: "demo-store", Nonce: "test-proof", ExpiresAt: time.Date(2027, 1, 1, 0, 0, 0, 0, time.UTC).Unix()}); err != nil {
+			if _, err := game.VerifyQR(users[i].ID, "test-session", attempt.ID, domain.QRProof{LocationID: ReceiptProofSource, Nonce: "test-proof", ExpiresAt: time.Date(2027, 1, 1, 0, 0, 0, 0, time.UTC).Unix()}); err != nil {
 				t.Fatal(err)
 			}
 		}

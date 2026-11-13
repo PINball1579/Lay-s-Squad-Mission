@@ -369,7 +369,7 @@ func (g *Game) CompleteMission(userID, squadID string, role domain.Role, attempt
 	}
 	if role == domain.QRRunner {
 		proof, verified := g.qrProofs[attemptID]
-		if !verified || proof.UserID != userID || !time.Unix(proof.ExpiresAt, 0).After(g.now()) || properties["locationId"] != proof.LocationID {
+		if !verified || proof.UserID != userID || proof.LocationID != ReceiptProofSource || !time.Unix(proof.ExpiresAt, 0).After(g.now()) || properties["locationId"] != proof.LocationID {
 			return domain.Squad{}, domain.Completion{}, false, ErrMissionFailed
 		}
 	}

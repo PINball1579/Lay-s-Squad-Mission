@@ -5,6 +5,7 @@ GOCACHE ?= $(CURDIR)/.cache/go-build
 GOMODCACHE ?= $(CURDIR)/.cache/go-mod
 PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH ?= $(shell command -v chromium 2>/dev/null)
 export GOCACHE GOMODCACHE PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH
+E2E_COMPOSE_ARGS ?= -f docker-compose.yml
 
 .PHONY: help install dev stop migrate test test-backend test-integration test-frontend lint build verify e2e-install e2e
 
@@ -45,9 +46,13 @@ build: ## Build API and production frontend
 	cd backend && go build ./cmd/api
 	cd frontend && npm run build
 
-e2e: ## Run Playwright journeys against the local Compose stack
-	docker compose exec -T db sh -c 'psql -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"' < infrastructure/reset-demo.sql
-	cd frontend && npm run e2e
+e2e: ## Run receipt journeys with an isolated OCR fixture; restore the normal API afterward
+	@set -eu; \
+	export RECEIPT_FIXTURE_DIR="$$(node frontend/scripts/create-receipt-fixtures.mjs)"; \
+	trap 'docker compose $(E2E_COMPOSE_ARGS) up -d --force-recreate api web >/dev/null 2>&1 || true; docker compose $(E2E_COMPOSE_ARGS) -f docker-compose.receipt-test.yml stop ocr-fixture >/dev/null 2>&1 || true' EXIT; \
+	docker compose $(E2E_COMPOSE_ARGS) -f docker-compose.receipt-test.yml up -d --force-recreate ocr-fixture api web; \
+	docker compose exec -T db sh -c 'psql -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"' < infrastructure/reset-demo.sql; \
+	npm --prefix frontend run e2e
 
 e2e-install: ## Install Playwright Chromium for first-time E2E use
 	cd frontend && npx playwright install chromium

@@ -317,7 +317,7 @@ func TestConcurrentFinalCompletionsUnlockExactlyOnce(t *testing.T) {
 				return
 			}
 			if assignedRole == domain.QRRunner {
-				_, attemptErr = store.VerifyQR(user.ID, sessionID, attempt.ID, domain.QRProof{LocationID: "demo-store", Nonce: "integration-proof", ExpiresAt: time.Now().Add(time.Hour).Unix()})
+				_, attemptErr = store.VerifyQR(user.ID, sessionID, attempt.ID, domain.QRProof{LocationID: service.ReceiptProofSource, Nonce: "integration-proof", ExpiresAt: time.Now().Add(time.Hour).Unix()})
 				if attemptErr != nil {
 					results <- attemptErr
 					return
@@ -502,7 +502,7 @@ func attemptProperties(role domain.Role, challenge map[string]any) map[string]an
 		}
 		return map[string]any{"answers": map[string]any{"q1": "Four", "q2": "All four missions"}}
 	case domain.QRRunner:
-		return map[string]any{"qrVerified": true, "locationId": "demo-store"}
+		return map[string]any{"qrVerified": true, "locationId": service.ReceiptProofSource}
 	default:
 		return nil
 	}
