@@ -1,0 +1,8 @@
+# Isolated real-LINE test stack. Requires Docker Compose 2.24.4 or newer.
+# Start with scripts/test-line.sh rather than applying this to the local stack.
+services:
+  api:
+    ports: !override []
+  web:
+    ports: !override
+      - "127.0.0.1:5174:8080"

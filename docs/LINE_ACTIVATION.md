@@ -5,6 +5,9 @@ Public activation needs an HTTPS website and a LINE Login channel/LIFF app
 created in the campaign owner's LINE Developers account. Local development can
 continue with `MOCK_LIFF=true` until those are available.
 
+No domain yet? Use the [temporary HTTPS test setup](LINE_TESTING.md) to test
+real LINE accounts and receipt photos on your phone first.
+
 ## LINE Developers setup
 
 1. Create a LINE Login channel under your provider. Enable web app login.

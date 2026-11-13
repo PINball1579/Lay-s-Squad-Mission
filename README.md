@@ -4,6 +4,9 @@
 
 A mobile-first Thai cooperative LIFF campaign experience. Four LINE users form a squad, lock unique roles, complete four different missions, and unlock a team reward. The campaign interface includes a responsive landing page, team roster, mission states, invite sharing, and a Thai operations dashboard. Local mode retains explicit test accounts, QR fixtures, and reward inventory for repeatable testing. See [campaign handoff](docs/CAMPAIGN_HANDOFF.md) for the confirmed coupon direction and the remaining hosting, LIFF, asset, and fulfillment setup.
 
+To test real LINE accounts on a phone before you have a domain, use the
+[temporary HTTPS setup](docs/LINE_TESTING.md): `bash scripts/test-line.sh`.
+
 ## Repository layout
 
 ```text

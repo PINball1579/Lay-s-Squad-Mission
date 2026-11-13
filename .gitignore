@@ -1,4 +1,5 @@
 .env
+.line-test/
 .DS_Store
 .tools/
 .cache/
